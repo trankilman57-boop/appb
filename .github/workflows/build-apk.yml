@@ -14,8 +14,9 @@ jobs:
       - name: Build APK dans le conteneur officiel kivy/buildozer
         run: |
           yes | docker run --rm -i \
+            --entrypoint bash \
             -v "${{ github.workspace }}":/home/user/hostcwd \
-            kivy/buildozer bash -c "sudo apt-get update && sudo apt-get install -y gettext && cd /home/user/hostcwd && yes | buildozer android debug"
+            kivy/buildozer -c "sudo apt-get update && sudo apt-get install -y gettext && cd /home/user/hostcwd && yes | buildozer android debug"
 
       - name: Publier l'APK comme artefact téléchargeable
         uses: actions/upload-artifact@v4
