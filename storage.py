@@ -89,3 +89,38 @@ def modifier_position(index, ticker=None, quantite=None, pru=None, date_achat=No
             positions[index]["date_achat"] = date_achat
         sauvegarder_positions(positions)
     return positions
+
+
+# ----------------------------------------------------------------------
+# Paramètres (adresse du serveur scoring, cf. server.py)
+# ----------------------------------------------------------------------
+
+def _settings_path():
+    return os.path.join(_data_dir(), "settings.json")
+
+
+def charger_settings():
+    path = _settings_path()
+    defaut = {"server_url": "http://192.168.1.X:8765"}
+    if not os.path.exists(path):
+        return defaut
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            defaut.update(data)
+            return defaut
+    except Exception:
+        return defaut
+
+
+def sauvegarder_settings(settings):
+    path = _settings_path()
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
+
+
+def set_server_url(url):
+    settings = charger_settings()
+    settings["server_url"] = url.strip()
+    sauvegarder_settings(settings)
+    return settings

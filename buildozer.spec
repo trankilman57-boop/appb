@@ -8,9 +8,10 @@ source.include_exts = py,kv,png,jpg,atlas
 
 version = 0.1
 
-# ATTENTION : yfinance dépend de pandas + requests + numpy, lourds à
-# compiler pour Android (voir README.md pour les limites réelles).
-requirements = python3,kivy==2.3.0,yfinance,pandas==v2.3.0,numpy==v2.3.3,requests,certifi
+# Client léger : la logique de scoring (yfinance/pandas/numpy) tourne côté
+# serveur (voir server.py) — plus besoin de compiler ces dépendances pour
+# Android, ce qui évite tous les problèmes de recettes python-for-android.
+requirements = python3,kivy==2.3.0,requests,certifi
 
 orientation = portrait
 fullscreen = 0
@@ -20,6 +21,7 @@ android.api = 33
 android.minapi = 24
 android.ndk = 25b
 android.archs = arm64-v8a
+android.accept_sdk_license = True
 
 [buildozer]
 log_level = 2
