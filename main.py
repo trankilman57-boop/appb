@@ -626,7 +626,7 @@ class PortfolioScreen(Screen):
         threading.Thread(target=self._lancer_pool, args=(positions, server_url), daemon=True).start()
 
     def _lancer_pool(self, positions, server_url):
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {
                 executor.submit(api_client.analyser_position, server_url,
                                  pos["ticker"], pos["quantite"], pos["pru"]): i
