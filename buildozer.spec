@@ -11,7 +11,11 @@ version = 0.1
 # Client léger : la logique de scoring (yfinance/pandas/numpy) tourne côté
 # serveur (voir server.py) — plus besoin de compiler ces dépendances pour
 # Android, ce qui évite tous les problèmes de recettes python-for-android.
+<<<<<<< HEAD
 requirements = python3==3.11.9,kivy==2.3.0,requests,certifi
+=======
+requirements = python3,kivy==2.3.0,requests,certifi
+>>>>>>> 7215671ea65d52af6572c651684cffe6015c94f3
 
 orientation = portrait
 fullscreen = 0
