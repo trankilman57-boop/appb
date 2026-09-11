@@ -16,7 +16,7 @@ jobs:
           yes | docker run --rm -i \
             --entrypoint bash \
             -v "${{ github.workspace }}":/home/user/hostcwd \
-            kivy/buildozer -c "sudo apt-get update && sudo apt-get install -y gettext && cd /home/user/hostcwd && yes | buildozer android debug"
+            kivy/buildozer -c "printf '#!/bin/bash\nexit 0\n' | sudo tee /usr/local/bin/autopoint && sudo chmod +x /usr/local/bin/autopoint && cd /home/user/hostcwd && yes | buildozer android debug"
 
       - name: Publier l'APK comme artefact téléchargeable
         uses: actions/upload-artifact@v4

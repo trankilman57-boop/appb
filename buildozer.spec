@@ -10,7 +10,7 @@ version = 0.1
 
 # ATTENTION : yfinance dépend de pandas + requests + numpy, lourds à
 # compiler pour Android (voir README.md pour les limites réelles).
-requirements = python3,kivy==2.3.0,yfinance,pandas,numpy,requests,certifi
+requirements = python3,kivy==2.3.0,yfinance,pandas==1.5.3,numpy==1.23.2,requests,certifi
 
 orientation = portrait
 fullscreen = 0
