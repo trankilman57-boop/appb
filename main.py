@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
-main.py — Suivi Bourse (Kivy)
+main.py — Suivi Bourse (Kivy, client léger)
 
-App autonome de suivi de positions boursières :
-- Formulaire d'ajout manuel (ticker, quantité, PRU)
-- Liste des positions avec PV/MV € et %, note santé/10, note dividende/10
-- Détail par position : prochain dividende (date + montant estimé),
-  rendement, et le détail des points clés (mêmes critères que
-  bilan_scanner.py)
-- Rafraîchissement des cours/notes en tâche de fond (thread) pour ne pas
-  geler l'UI pendant les appels réseau yfinance.
+Version "client/serveur" de l'app : ne dépend que de kivy + requests
+(plus de yfinance/pandas/numpy embarqués — trop lourds à cross-compiler
+pour Android). La vraie logique de scoring tourne dans server.py, sur
+ton PC/VPS/Termux, et cette app l'appelle en HTTP.
+
+Écrans :
+- Portefeuille : liste des positions, PV/MV, notes santé/dividende
+- Ajouter : formulaire (ticker, quantité, PRU)
+- Détail : prochain dividende, points clés
+- Paramètres : adresse du serveur (http://IP:8765)
 
 Lancement desktop (test) : python main.py
-Packaging Android : voir buildozer.spec + README.md
+Packaging Android : voir buildozer.spec (léger, pas de recettes numpy/pandas)
 """
 
 import threading
@@ -23,16 +25,12 @@ from kivy.clock import mainthread
 from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.popup import Popup
 from kivy.uix.label import Label
 
 import storage
-import scoring
+import api_client
 
 KV = """
-#:import utils kivy.utils
-
 <PositionRow@BoxLayout>:
     orientation: "vertical"
     size_hint_y: None
@@ -114,7 +112,6 @@ KV = """
                 halign: "left"
                 text_size: self.size
             Label:
-                id: total_label
                 text: root.total_txt
                 bold: True
                 halign: "right"
@@ -133,9 +130,17 @@ KV = """
                 text: "Rafraîchir"
                 disabled: root.refreshing
                 on_release: root.rafraichir()
-            Label:
-                text: "..." if root.refreshing else ""
-                size_hint_x: 0.3
+            Button:
+                text: "Param."
+                size_hint_x: 0.35
+                on_release: root.manager.current = "settings"
+
+        Label:
+            text: root.erreur_globale
+            color: 0.9, 0.6, 0.2, 1
+            size_hint_y: None
+            height: dp(28) if root.erreur_globale else 0
+            font_size: "12sp"
 
         ScrollView:
             BoxLayout:
@@ -280,11 +285,78 @@ KV = """
                     Button:
                         text: "Supprimer la position"
                         on_release: root.supprimer()
+
+<SettingsScreen>:
+    name: "settings"
+    BoxLayout:
+        orientation: "vertical"
+        padding: dp(20)
+        spacing: dp(14)
+
+        Label:
+            text: "Paramètres"
+            font_size: "20sp"
+            bold: True
+            size_hint_y: None
+            height: dp(40)
+
+        Label:
+            text: "Adresse du serveur scoring (server.py)"
+            size_hint_y: None
+            height: dp(24)
+            halign: "left"
+            text_size: self.size
+
+        TextInput:
+            id: url_input
+            hint_text: "http://192.168.1.X:8765"
+            multiline: False
+            size_hint_y: None
+            height: dp(48)
+
+        Label:
+            id: statut_label
+            text: root.statut_txt
+            color: root.statut_color
+            size_hint_y: None
+            height: dp(30)
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(48)
+            spacing: dp(10)
+            Button:
+                text: "Tester la connexion"
+                on_release: root.tester()
+            Button:
+                text: "Enregistrer"
+                on_release: root.enregistrer()
+
+        Label:
+            text:
+                ("Cette app ne fait tourner aucun calcul localement : "
+                "elle interroge un petit serveur (server.py) que tu lances "
+                "sur ton PC, ton VPS, ou Termux, et qui lui fait le vrai "
+                "travail (yfinance/pandas). Renseigne ici son adresse IP "
+                "et son port (8765 par défaut).")
+            size_hint_y: None
+            height: self.texture_size[1]
+            text_size: self.width, None
+            halign: "left"
+            font_size: "13sp"
+            color: 0.7, 0.7, 0.72, 1
+
+        Widget:
+
+        Button:
+            text: "< Retour au portefeuille"
+            size_hint_y: None
+            height: dp(48)
+            on_release: root.manager.current = "portfolio"
 """
 
 
 def couleur_pv(valeur):
-    """Vert si plus-value, rouge si moins-value, blanc si neutre/inconnu."""
     if valeur is None:
         return (1, 1, 1, 1)
     if valeur > 0:
@@ -298,6 +370,7 @@ class PortfolioScreen(Screen):
     total_txt = StringProperty("")
     total_color = ListProperty([1, 1, 1, 1])
     refreshing = BooleanProperty(False)
+    erreur_globale = StringProperty("")
 
     def on_pre_enter(self):
         self.rafraichir()
@@ -306,25 +379,29 @@ class PortfolioScreen(Screen):
         if self.refreshing:
             return
         self.refreshing = True
+        self.erreur_globale = ""
         self.ids.liste_box.clear_widgets()
-        loading = Label(text="Chargement des cours...", size_hint_y=None, height=60)
-        self.ids.liste_box.add_widget(loading)
+        self.ids.liste_box.add_widget(
+            Label(text="Interrogation du serveur...", size_hint_y=None, height=60)
+        )
         threading.Thread(target=self._charger_en_fond, daemon=True).start()
 
     def _charger_en_fond(self):
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
         positions = storage.charger_positions()
         resultats = []
         for pos in positions:
-            r = scoring.analyser_position(pos["ticker"], pos["quantite"], pos["pru"])
-            r["_source"] = pos
+            r = api_client.analyser_position(server_url, pos["ticker"], pos["quantite"], pos["pru"])
             resultats.append(r)
-        self._afficher_resultats(resultats)
+        self._afficher_resultats(resultats, server_url)
 
     @mainthread
-    def _afficher_resultats(self, resultats):
+    def _afficher_resultats(self, resultats, server_url):
         self.ids.liste_box.clear_widgets()
         total_pv = 0.0
         total_connu = False
+        erreurs_connexion = 0
 
         if not resultats:
             self.ids.liste_box.add_widget(
@@ -333,12 +410,13 @@ class PortfolioScreen(Screen):
             )
 
         for i, r in enumerate(resultats):
-            row = Builder.template if False else None  # noqa (placeholder, widget créé ci-dessous)
             from kivy.factory import Factory
             row = Factory.PositionRow()
             row.ticker = r["ticker"]
             row.nom = r.get("nom") or r["ticker"]
             if r.get("erreur"):
+                if "injoignable" in r["erreur"] or "Timeout" in r["erreur"]:
+                    erreurs_connexion += 1
                 row.pv_mv_txt = "Erreur"
                 row.pv_mv_color = (0.9, 0.6, 0.2, 1)
             elif r.get("pv_mv_eur") is not None:
@@ -360,12 +438,16 @@ class PortfolioScreen(Screen):
                       self._ouvrir_detail(idx, res) if inst.collide_point(*touch.pos) else None)
             self.ids.liste_box.add_widget(row)
 
+        if erreurs_connexion and erreurs_connexion == len(resultats) and resultats:
+            self.erreur_globale = f"Serveur injoignable à {server_url} — vérifie Paramètres."
+        else:
+            self.erreur_globale = ""
+
         self.total_txt = f"PV/MV totale: {'+' if total_pv >= 0 else ''}{total_pv:.2f} €" if total_connu else ""
         self.total_color = couleur_pv(total_pv if total_connu else None)
         self.refreshing = False
 
     def _ouvrir_detail(self, index, resultat):
-        app = App.get_running_app()
         detail = self.manager.get_screen("detail")
         detail.charger(index, resultat)
         self.manager.current = "detail"
@@ -460,6 +542,38 @@ class DetailScreen(Screen):
         self.manager.current = "portfolio"
 
 
+class SettingsScreen(Screen):
+    statut_txt = StringProperty("")
+    statut_color = ListProperty([1, 1, 1, 1])
+
+    def on_pre_enter(self):
+        settings = storage.charger_settings()
+        self.ids.url_input.text = settings.get("server_url", "")
+        self.statut_txt = ""
+
+    def tester(self):
+        url = self.ids.url_input.text.strip()
+        self.statut_txt = "Test en cours..."
+        self.statut_color = (1, 1, 1, 1)
+        threading.Thread(target=self._tester_en_fond, args=(url,), daemon=True).start()
+
+    def _tester_en_fond(self, url):
+        ok, message = api_client.tester_connexion(url)
+        self._afficher_statut(ok, message)
+
+    @mainthread
+    def _afficher_statut(self, ok, message):
+        self.statut_txt = message
+        self.statut_color = (0.30, 0.80, 0.40, 1) if ok else (0.90, 0.30, 0.30, 1)
+
+    def enregistrer(self):
+        url = self.ids.url_input.text.strip()
+        if url:
+            storage.set_server_url(url)
+            self.statut_txt = "Enregistré."
+            self.statut_color = (0.30, 0.80, 0.40, 1)
+
+
 class SuiviBourseApp(App):
     def build(self):
         Builder.load_string(KV)
@@ -467,6 +581,7 @@ class SuiviBourseApp(App):
         sm.add_widget(PortfolioScreen())
         sm.add_widget(AddPositionScreen())
         sm.add_widget(DetailScreen())
+        sm.add_widget(SettingsScreen())
         return sm
 
 

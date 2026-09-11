@@ -1,55 +1,69 @@
-# Suivi Bourse — app Kivy de suivi de positions
+# Suivi Bourse — architecture client léger + serveur de scoring
 
-Formulaire d'ajout manuel (ticker, quantité, PRU), PV/MV en direct, prochain
-détachement de dividende, et notes santé financière / fiabilité dividende
-**reprenant exactement les critères et pondérations de `bilan_scanner.py`**
-(portage sans print dans `scoring.py`).
+Après plusieurs bugs bloquants côté compilation Android de pandas/numpy
+(voir historique de la conversation), l'app est maintenant coupée en deux :
+
+- **`server.py`** : petit serveur Flask qui héberge `scoring.py` (la
+  logique complète de bilan_scanner.py — santé financière + fiabilité
+  dividende, mêmes pondérations). Tourne sur ton PC, ton VPS, ou Termux
+  — là où `pip install pandas yfinance` s'installe normalement.
+- **App Kivy (`main.py`)** : client léger, ne dépend que de `kivy` et
+  `requests`. Appelle le serveur en HTTP pour récupérer les scores.
+  Compile en quelques minutes, sans les soucis de recettes numpy/pandas.
+
+## 1. Lancer le serveur
+
+Sur la machine qui va faire tourner `server.py` en continu (ton PC,
+un VPS, ou Termux) :
+
+```bash
+pip install flask yfinance pandas --break-system-packages
+python server.py
+```
+
+Le serveur écoute sur `0.0.0.0:8765`. Note l'adresse IP de cette machine
+sur ton réseau local (`ip addr` sur Linux, `ipconfig` sur Windows) —
+tu en auras besoin dans l'app.
+
+**Pour un accès depuis n'importe où** (pas juste le Wi-Fi de la maison),
+le plus simple et sûr est d'installer **Tailscale** (VPN gratuit,
+zéro-config) sur le serveur ET sur le téléphone : l'app utilise alors
+l'IP Tailscale du serveur, accessible depuis n'importe quel réseau sans
+exposer le serveur publiquement sur Internet.
+
+## 2. Configurer l'app
+
+1. Ouvre l'app → **Param.**
+2. Renseigne l'adresse : `http://IP-DU-SERVEUR:8765` (ex: `http://192.168.1.42:8765`
+   ou l'IP Tailscale)
+3. **Tester la connexion** pour vérifier
+4. **Enregistrer**
+
+## 3. Utiliser l'app
+
+- **+ Ajouter** : ticker, quantité, PRU
+- **Rafraîchir** : interroge le serveur pour tous les tickers du
+  portefeuille (prix, PV/MV, notes)
+- Tape sur une ligne pour voir le détail (prochain dividende, points clés)
 
 ## Fichiers
 
-- `main.py` — l'app Kivy (3 écrans : portefeuille, ajout, détail)
-- `scoring.py` — logique de notation portée de bilan_scanner.py
-- `storage.py` — persistance JSON locale des positions
-- `buildozer.spec` — config de packaging Android
+- `main.py` — app Kivy (client)
+- `api_client.py` — appels HTTP vers le serveur
+- `storage.py` — positions + paramètres, stockage JSON local sur le téléphone
+- `server.py` — serveur Flask (à lancer côté PC/VPS/Termux)
+- `scoring.py` — logique de scoring (identique à avant, inchangée)
+- `buildozer.spec` — packaging Android (léger : kivy + requests seulement)
 
-## Tester tout de suite (PC ou Termux, sans compiler d'APK)
+## Compiler l'APK
 
-```bash
-pip install kivy yfinance --break-system-packages
-python main.py
-```
+Process GitHub Actions inchangé (voir `PROCESS_BUILD_APK.md`) — mais
+cette fois la compilation devrait être nettement plus rapide et fiable
+puisqu'il n'y a plus de pandas/numpy à cross-compiler.
 
-Sur Termux, Kivy s'affiche via un serveur X (ex: appli Termux:X11) — pas
-d'affichage graphique natif dans Termux seul. C'est le moyen le plus rapide
-de valider que la logique et l'UI fonctionnent avant de packager.
+## Limitation à garder en tête
 
-## ⚠️ Point d'attention important : compiler l'APK
-
-Buildozer (l'outil qui transforme ce code en `.apk`) a besoin du SDK/NDK
-Android, de plusieurs Go d'espace, et compile des paquets natifs. Sur ton
-téléphone (pas d'admin, réseau restreint) ce sera probablement difficile
-voire impossible à faire tourner directement dans Termux. En pratique :
-
-1. **Le plus simple** : compile l'APK sur un PC (Linux ou WSL) avec
-   Buildozer, puis transfère juste le `.apk` sur ton téléphone pour
-   l'installer. C'est l'usage normal de Buildozer.
-2. **Alternative cloud** : GitHub Actions peut compiler l'APK pour toi
-   (action `buildozer` officielle) — tu pousses le code sur ton Gitea/GitHub,
-   l'action te sort un `.apk` téléchargeable, aucune compilation locale.
-3. `yfinance` embarque `pandas`/`numpy` : recipes p4a disponibles mais la
-   compilation est longue (30-60 min) et parfois fragile selon les versions.
-   Si ça bloque, la solution de repli est de garder la logique `scoring.py`
-   côté **serveur** (petite API Flask sur ton VPS ou en local Termux) et de
-   faire une app Kivy plus légère qui l'appelle en HTTP — je peux basculer
-   là-dessus si le build Android coince.
-
-## Prochaines étapes possibles
-
-- Icône et splash screen
-- Notification (ntfy.sh, vu que tu explores déjà ça) le jour de détachement
-  d'un dividende
-- Export CSV du portefeuille
-- Tri de la liste (par PV/MV, par note, alphabétique)
-
-Dis-moi si tu veux que j'ajoute une de ces briques, ou si tu préfères qu'on
-bascule sur l'option "scoring côté VPS + app légère" pour sécuriser le build.
+Le serveur doit être **allumé et accessible** au moment où tu ouvres
+l'app pour que "Rafraîchir" fonctionne. Si tu veux une disponibilité
+24/7 sans dépendre de ton PC, héberge `server.py` sur un petit VPS
+(quelques euros/mois) plutôt qu'en local.
