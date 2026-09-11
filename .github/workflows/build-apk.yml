@@ -11,15 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build APK avec Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
-        with:
-          command: buildozer android debug
-          buildozer_version: stable
+      - name: Build APK dans le conteneur officiel kivy/buildozer
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/home/user/hostcwd \
+            kivy/buildozer android debug
 
       - name: Publier l'APK comme artefact téléchargeable
         uses: actions/upload-artifact@v4
         with:
           name: suivi-bourse-apk
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
