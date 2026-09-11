@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from kivy.app import App
-from kivy.clock import mainthread
+from kivy.clock import mainthread, Clock
 from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
@@ -86,6 +86,7 @@ KV = """
 
     ticker: ""
     nom: ""
+    prix_txt: ""
     pv_mv_txt: "..."
     pv_mv_color: 0.62, 0.65, 0.70, 1
     accent_color: 0.30, 0.62, 0.98, 1
@@ -96,7 +97,8 @@ KV = """
     BoxLayout:
         size_hint_y: 0.55
         Label:
-            text: root.nom
+            text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
+            markup: True
             bold: True
             font_size: "15sp"
             color: 0.95, 0.96, 0.97, 1
@@ -216,7 +218,7 @@ KV = """
                     text_size: self.size
                     size_hint_y: 0.55
                 Label:
-                    text: root.total_txt
+                    text: root.total_txt + ("   ·   MàJ " + root.derniere_maj if root.derniere_maj else "")
                     bold: True
                     font_size: "14sp"
                     color: root.total_color
@@ -568,9 +570,27 @@ class PortfolioScreen(Screen):
     total_color = ListProperty(list(WHITE))
     refreshing = BooleanProperty(False)
     erreur_globale = StringProperty("")
+    derniere_maj = StringProperty("")
+
+    INTERVALLE_AUTO_REFRESH = 300  # secondes (5 minutes)
+    _auto_refresh_event = None
 
     def on_pre_enter(self):
         self.rafraichir()
+
+    def on_enter(self):
+        # Auto-rafraîchissement tant que cet écran est affiché ; annulé
+        # dans on_leave pour ne pas continuer à interroger le serveur en
+        # arrière-plan une fois qu'on a quitté l'écran portefeuille.
+        if self._auto_refresh_event is None:
+            self._auto_refresh_event = Clock.schedule_interval(
+                lambda dt: self.rafraichir(), self.INTERVALLE_AUTO_REFRESH
+            )
+
+    def on_leave(self):
+        if self._auto_refresh_event is not None:
+            self._auto_refresh_event.cancel()
+            self._auto_refresh_event = None
 
     def rafraichir(self):
         if self.refreshing:
@@ -629,6 +649,10 @@ class PortfolioScreen(Screen):
         row.ticker = r.get("ticker", row.ticker)
         row.nom = r.get("nom") or row.ticker
 
+        prix = r.get("prix_actuel")
+        devise = r.get("devise") or ""
+        row.prix_txt = f"{prix} {devise}".strip() if prix is not None else ""
+
         if r.get("erreur"):
             err = r["erreur"] or ""
             if "injoignable" in err or "timeout" in err.lower():
@@ -667,6 +691,7 @@ class PortfolioScreen(Screen):
             self.erreur_globale = f"Serveur injoignable à {settings.get('server_url', '')} — vérifie Paramètres."
         else:
             self.erreur_globale = ""
+        self.derniere_maj = datetime.now().strftime("%H:%M")
 
     def _ouvrir_detail(self, resultat):
         detail = self.manager.get_screen("detail")
