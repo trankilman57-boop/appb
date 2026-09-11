@@ -438,6 +438,93 @@ def analyser_position(ticker_symbol, quantite=None, pru=None):
     return resultat
 
 
+# ----------------------------------------------------------------------
+# Actualités + sentiment (lexique simple, pas de dépendance ML lourde)
+# ----------------------------------------------------------------------
+
+_MOTS_POSITIFS = {
+    "surge", "soar", "beat", "beats", "growth", "record", "profit", "gain", "gains",
+    "upgrade", "outperform", "strong", "rally", "boost", "positive", "rise", "rises",
+    "jump", "jumps", "bullish", "success", "win", "wins", "expand", "expansion",
+    "hausse", "croissance", "succès", "optimiste",
+}
+_MOTS_NEGATIFS = {
+    "plunge", "fall", "falls", "drop", "drops", "loss", "losses", "downgrade",
+    "underperform", "weak", "decline", "cut", "cuts", "warning", "negative",
+    "slump", "bearish", "miss", "misses", "lawsuit", "investigation", "scandal",
+    "baisse", "chute", "perte", "avertissement", "enquête", "recul",
+}
+
+
+def _score_sentiment(texte):
+    """Score de sentiment très simple, basé sur un lexique anglais/français.
+    Retourne 'positif', 'negatif' ou 'neutre'. Indication rapide, pas une
+    vraie analyse NLP — évite d'ajouter une dépendance ML lourde."""
+    if not texte:
+        return "neutre"
+    mots = texte.lower().replace(",", " ").replace(".", " ").split()
+    pos = sum(1 for m in mots if m in _MOTS_POSITIFS)
+    neg = sum(1 for m in mots if m in _MOTS_NEGATIFS)
+    if pos > neg:
+        return "positif"
+    if neg > pos:
+        return "negatif"
+    return "neutre"
+
+
+def obtenir_actualites(ticker_symbol, limit=6):
+    """Retourne une liste de dicts {titre, editeur, date, lien, sentiment}
+    pour les dernières actualités d'un ticker via yfinance."""
+    if yf is None:
+        return []
+    try:
+        ticker_obj = yf.Ticker(ticker_symbol)
+        brut = ticker_obj.news or []
+    except Exception:
+        return []
+
+    resultats = []
+    for item in brut[:limit]:
+        # yfinance renvoie soit un format plat, soit imbriqué sous "content"
+        contenu = item.get("content", item)
+        titre = contenu.get("title") or item.get("title") or ""
+        editeur = (
+            (contenu.get("provider") or {}).get("displayName")
+            or item.get("publisher")
+            or ""
+        )
+        lien = (
+            (contenu.get("canonicalUrl") or {}).get("url")
+            or (contenu.get("clickThroughUrl") or {}).get("url")
+            or item.get("link")
+            or ""
+        )
+        date_pub = contenu.get("pubDate") or ""
+        if not date_pub and item.get("providerPublishTime"):
+            try:
+                date_pub = datetime.fromtimestamp(item["providerPublishTime"]).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                date_pub = ""
+        elif date_pub:
+            try:
+                date_pub = datetime.fromisoformat(date_pub.replace("Z", "+00:00")).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                pass
+
+        if not titre:
+            continue
+
+        resultats.append({
+            "titre": titre,
+            "editeur": editeur,
+            "date": date_pub,
+            "lien": lien,
+            "sentiment": _score_sentiment(titre),
+        })
+
+    return resultats
+
+
 if __name__ == "__main__":
     # Debug rapide en ligne de commande : python scoring.py MC.PA 10 650
     if len(sys.argv) < 2:

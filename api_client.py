@@ -39,6 +39,20 @@ def analyser_position(server_url, ticker, quantite=None, pru=None):
         return _erreur(ticker, str(e))
 
 
+def obtenir_actualites(server_url, ticker, limit=6):
+    """Appelle GET {server_url}/news?ticker=...&limit=...
+    Retourne une liste de dicts {titre, editeur, date, lien, sentiment},
+    ou une liste vide en cas d'erreur."""
+    url = server_url.rstrip("/") + "/news"
+    try:
+        resp = requests.get(url, params={"ticker": ticker, "limit": limit}, timeout=TIMEOUT_SECONDES)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("actualites", [])
+    except Exception:
+        return []
+
+
 def tester_connexion(server_url):
     """Vérifie que le serveur répond. Retourne (ok: bool, message: str)."""
     url = server_url.rstrip("/") + "/health"

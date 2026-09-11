@@ -50,6 +50,16 @@ def analyser():
     return jsonify(resultat)
 
 
+@app.route("/news")
+def news():
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"erreur": "paramètre 'ticker' manquant"}), 400
+    limit = request.args.get("limit", default=6, type=int)
+    actualites = scoring.obtenir_actualites(ticker, limit=limit)
+    return jsonify({"ticker": ticker, "actualites": actualites})
+
+
 if __name__ == "__main__":
     # host="0.0.0.0" pour être accessible depuis le téléphone sur le même
     # réseau (ou via Tailscale/VPN) — pas juste depuis localhost.

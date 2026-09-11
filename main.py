@@ -1,55 +1,96 @@
 #!/usr/bin/env python3
 """
-main.py — Suivi Bourse (Kivy, client léger)
+main.py — Suivi Bourse (Kivy, client léger) — v3
 
-Version "client/serveur" de l'app : ne dépend que de kivy + requests
-(plus de yfinance/pandas/numpy embarqués — trop lourds à cross-compiler
-pour Android). La vraie logique de scoring tourne dans server.py, sur
-ton PC/VPS/Termux, et cette app l'appelle en HTTP.
+Nouveautés vs v2 :
+- Rafraîchissement progressif : chaque position affiche son résultat dès
+  qu'il arrive (pool de threads + mise à jour ligne par ligne), au lieu
+  d'attendre que TOUT le portefeuille soit chargé avant d'afficher quoi
+  que ce soit.
+- UI retravaillée : palette cohérente, cartes avec accent coloré selon
+  PV/MV, hiérarchie visuelle plus claire.
+- Écran Actualités par position (titres + sentiment basique + lien).
 
-Écrans :
-- Portefeuille : liste des positions, PV/MV, notes santé/dividende
-- Ajouter : formulaire (ticker, quantité, PRU)
-- Détail : prochain dividende, points clés
-- Paramètres : adresse du serveur (http://IP:8765)
-
-Lancement desktop (test) : python main.py
-Packaging Android : voir buildozer.spec (léger, pas de recettes numpy/pandas)
+Toujours un client léger (kivy + requests) : la vraie logique tourne sur
+server.py (voir README).
 """
 
 import threading
+import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from kivy.app import App
 from kivy.clock import mainthread
 from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
-from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.label import Label
+from kivy.factory import Factory
 
 import storage
 import api_client
 
+BG = (0.07, 0.08, 0.10, 1)
+CARD = (0.13, 0.145, 0.175, 1)
+TXT_MUTED = (0.62, 0.65, 0.70, 1)
+GREEN = (0.32, 0.78, 0.48, 1)
+RED = (0.92, 0.38, 0.38, 1)
+ORANGE = (0.95, 0.65, 0.25, 1)
+WHITE = (0.95, 0.96, 0.97, 1)
+
 KV = """
+#:import dp kivy.metrics.dp
+
+<SectionLabel@Label>:
+    bold: True
+    font_size: "13sp"
+    color: 0.62, 0.65, 0.70, 1
+    size_hint_y: None
+    height: dp(26)
+    halign: "left"
+    text_size: self.size
+
+<PillButton@Button>:
+    background_normal: ""
+    background_color: 0.30, 0.62, 0.98, 1
+    color: 1, 1, 1, 1
+    bold: True
+    font_size: "13sp"
+
+<GhostButton@Button>:
+    background_normal: ""
+    background_color: 0.18, 0.20, 0.24, 1
+    color: 0.85, 0.87, 0.90, 1
+    font_size: "13sp"
+
 <PositionRow@BoxLayout>:
     orientation: "vertical"
     size_hint_y: None
-    height: dp(96)
-    padding: dp(10), dp(6)
-    spacing: dp(2)
+    height: dp(100)
+    padding: dp(14), dp(10)
+    spacing: dp(4)
     canvas.before:
         Color:
-            rgba: 0.12, 0.12, 0.14, 1
-        Rectangle:
+            rgba: 0.13, 0.145, 0.175, 1
+        RoundedRectangle:
             pos: self.pos
             size: self.size
+            radius: [dp(10)]
+        Color:
+            rgba: root.accent_color
+        RoundedRectangle:
+            pos: self.pos
+            size: (dp(4), self.height)
+            radius: [dp(2)]
 
     ticker: ""
     nom: ""
-    pv_mv_txt: ""
-    pv_mv_color: 1, 1, 1, 1
-    sante_txt: "N/A"
-    div_txt: "N/A"
+    pv_mv_txt: "..."
+    pv_mv_color: 0.62, 0.65, 0.70, 1
+    accent_color: 0.30, 0.62, 0.98, 1
+    sante_txt: "…"
+    div_txt: "…"
     verdict: ""
 
     BoxLayout:
@@ -57,6 +98,8 @@ KV = """
         Label:
             text: root.nom
             bold: True
+            font_size: "15sp"
+            color: 0.95, 0.96, 0.97, 1
             halign: "left"
             valign: "middle"
             text_size: self.size
@@ -65,23 +108,27 @@ KV = """
             text: root.pv_mv_txt
             color: root.pv_mv_color
             bold: True
+            font_size: "15sp"
             halign: "right"
             valign: "middle"
             text_size: self.size
-            size_hint_x: 0.45
+            size_hint_x: 0.5
 
     BoxLayout:
         size_hint_y: 0.45
+        spacing: dp(10)
         Label:
-            text: "Santé " + root.sante_txt + "/10"
+            text: "[color=9fa3ab]Santé[/color]  [b]" + root.sante_txt + "[/b]/10"
+            markup: True
             font_size: "12sp"
-            color: 0.75, 0.75, 0.78, 1
+            color: 0.85, 0.87, 0.90, 1
             halign: "left"
             text_size: self.size
         Label:
-            text: "Div " + root.div_txt + "/10"
+            text: "[color=9fa3ab]Div[/color]  [b]" + root.div_txt + "[/b]/10"
+            markup: True
             font_size: "12sp"
-            color: 0.75, 0.75, 0.78, 1
+            color: 0.85, 0.87, 0.90, 1
             halign: "left"
             text_size: self.size
         Label:
@@ -90,54 +137,113 @@ KV = """
             halign: "right"
             text_size: self.size
 
+<NewsRow@BoxLayout>:
+    orientation: "vertical"
+    size_hint_y: None
+    height: self.minimum_height
+    padding: dp(14), dp(10)
+    spacing: dp(4)
+    canvas.before:
+        Color:
+            rgba: 0.13, 0.145, 0.175, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(10)]
+
+    titre: ""
+    editeur: ""
+    date_txt: ""
+    sentiment: "neutre"
+    lien: ""
+
+    Label:
+        text: root.titre
+        bold: True
+        font_size: "14sp"
+        color: 0.95, 0.96, 0.97, 1
+        size_hint_y: None
+        height: self.texture_size[1]
+        text_size: self.width, None
+        halign: "left"
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(22)
+        spacing: dp(8)
+        Label:
+            text: root.editeur + ("  •  " + root.date_txt if root.date_txt else "")
+            font_size: "11sp"
+            color: 0.62, 0.65, 0.70, 1
+            halign: "left"
+            text_size: self.size
+        Label:
+            text: ("🟢 Positif" if root.sentiment == "positif" else "🔴 Négatif" if root.sentiment == "negatif" else "⚪ Neutre")
+            font_size: "11sp"
+            halign: "right"
+            text_size: self.size
+            size_hint_x: 0.4
+
 <PortfolioScreen>:
     name: "portfolio"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
     BoxLayout:
         orientation: "vertical"
 
         BoxLayout:
             size_hint_y: None
-            height: dp(56)
-            padding: dp(10), dp(6)
+            height: dp(72)
+            padding: dp(16), dp(10)
             canvas.before:
                 Color:
-                    rgba: 0.08, 0.08, 0.10, 1
+                    rgba: 0.10, 0.11, 0.14, 1
                 Rectangle:
                     pos: self.pos
                     size: self.size
-            Label:
-                text: "Mon portefeuille"
-                bold: True
-                font_size: "18sp"
-                halign: "left"
-                text_size: self.size
-            Label:
-                text: root.total_txt
-                bold: True
-                halign: "right"
-                text_size: self.size
-                color: root.total_color
+            BoxLayout:
+                orientation: "vertical"
+                Label:
+                    text: "Suivi Bourse"
+                    bold: True
+                    font_size: "20sp"
+                    color: 0.95, 0.96, 0.97, 1
+                    halign: "left"
+                    text_size: self.size
+                    size_hint_y: 0.55
+                Label:
+                    text: root.total_txt
+                    bold: True
+                    font_size: "14sp"
+                    color: root.total_color
+                    halign: "left"
+                    text_size: self.size
+                    size_hint_y: 0.45
 
         BoxLayout:
             size_hint_y: None
-            height: dp(44)
-            padding: dp(6), dp(4)
-            spacing: dp(6)
-            Button:
+            height: dp(48)
+            padding: dp(10), dp(6)
+            spacing: dp(8)
+            PillButton:
                 text: "+ Ajouter"
                 on_release: root.manager.current = "add"
-            Button:
+            GhostButton:
                 text: "Rafraîchir"
                 disabled: root.refreshing
                 on_release: root.rafraichir()
-            Button:
+            GhostButton:
                 text: "Param."
-                size_hint_x: 0.35
+                size_hint_x: 0.3
                 on_release: root.manager.current = "settings"
 
         Label:
             text: root.erreur_globale
-            color: 0.9, 0.6, 0.2, 1
+            color: 0.95, 0.65, 0.25, 1
             size_hint_y: None
             height: dp(28) if root.erreur_globale else 0
             font_size: "12sp"
@@ -148,27 +254,42 @@ KV = """
                 orientation: "vertical"
                 size_hint_y: None
                 height: self.minimum_height
+                padding: dp(10), dp(4)
+                spacing: dp(8)
 
 <AddPositionScreen>:
     name: "add"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
     BoxLayout:
         orientation: "vertical"
-        padding: dp(20)
+        padding: dp(24)
         spacing: dp(14)
 
         Label:
             text: "Nouvelle position"
             font_size: "20sp"
             bold: True
+            color: 0.95, 0.96, 0.97, 1
             size_hint_y: None
             height: dp(40)
+            halign: "left"
+            text_size: self.size
 
         TextInput:
             id: ticker_input
-            hint_text: "Ticker Yahoo Finance (ex: MC.PA, AAPL, TTE.PA)"
+            hint_text: "Ticker (ex: MC.PA, AAPL, TTE.PA)"
             multiline: False
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
+            background_color: 0.13, 0.145, 0.175, 1
+            foreground_color: 1, 1, 1, 1
+            hint_text_color: 0.55, 0.58, 0.62, 1
+            padding: dp(12), dp(14)
 
         TextInput:
             id: quantite_input
@@ -176,7 +297,11 @@ KV = """
             multiline: False
             input_filter: "float"
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
+            background_color: 0.13, 0.145, 0.175, 1
+            foreground_color: 1, 1, 1, 1
+            hint_text_color: 0.55, 0.58, 0.62, 1
+            padding: dp(12), dp(14)
 
         TextInput:
             id: pru_input
@@ -184,23 +309,28 @@ KV = """
             multiline: False
             input_filter: "float"
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
+            background_color: 0.13, 0.145, 0.175, 1
+            foreground_color: 1, 1, 1, 1
+            hint_text_color: 0.55, 0.58, 0.62, 1
+            padding: dp(12), dp(14)
 
         Label:
             id: erreur_label
             text: ""
-            color: 0.9, 0.3, 0.3, 1
+            color: 0.92, 0.38, 0.38, 1
             size_hint_y: None
-            height: dp(30)
+            height: dp(26)
+            font_size: "12sp"
 
         BoxLayout:
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
             spacing: dp(10)
-            Button:
+            GhostButton:
                 text: "Annuler"
                 on_release: root.annuler()
-            Button:
+            PillButton:
                 text: "Ajouter"
                 on_release: root.ajouter()
 
@@ -208,29 +338,41 @@ KV = """
 
 <DetailScreen>:
     name: "detail"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
     BoxLayout:
         orientation: "vertical"
 
         BoxLayout:
             size_hint_y: None
-            height: dp(56)
-            padding: dp(10), dp(6)
+            height: dp(64)
+            padding: dp(12), dp(10)
+            spacing: dp(8)
             canvas.before:
                 Color:
-                    rgba: 0.08, 0.08, 0.10, 1
+                    rgba: 0.10, 0.11, 0.14, 1
                 Rectangle:
                     pos: self.pos
                     size: self.size
-            Button:
-                text: "< Retour"
-                size_hint_x: 0.3
+            GhostButton:
+                text: "<"
+                size_hint_x: 0.15
                 on_release: root.manager.current = "portfolio"
             Label:
                 text: root.nom
                 bold: True
-                font_size: "16sp"
-                halign: "right"
+                font_size: "17sp"
+                color: 0.95, 0.96, 0.97, 1
+                halign: "left"
                 text_size: self.size
+            PillButton:
+                text: "Actus"
+                size_hint_x: 0.3
+                on_release: root.ouvrir_actualites()
 
         ScrollView:
             BoxLayout:
@@ -247,14 +389,11 @@ KV = """
                     height: self.texture_size[1]
                     text_size: self.width, None
                     halign: "left"
+                    color: 0.90, 0.92, 0.94, 1
 
-                Label:
-                    text: "[b]Points clés — Santé financière[/b]"
-                    markup: True
-                    size_hint_y: None
-                    height: dp(30) if root.notes_sante else 0
-                    text_size: self.width, None
-                    halign: "left"
+                SectionLabel:
+                    text: "POINTS CLÉS — SANTÉ FINANCIÈRE"
+                    height: dp(26) if root.notes_sante else 0
 
                 Label:
                     text: root.notes_sante_txt
@@ -262,14 +401,11 @@ KV = """
                     height: self.texture_size[1]
                     text_size: self.width, None
                     halign: "left"
+                    color: 0.80, 0.83, 0.86, 1
 
-                Label:
-                    text: "[b]Points clés — Fiabilité dividende[/b]"
-                    markup: True
-                    size_hint_y: None
-                    height: dp(30) if root.notes_div else 0
-                    text_size: self.width, None
-                    halign: "left"
+                SectionLabel:
+                    text: "POINTS CLÉS — FIABILITÉ DIVIDENDE"
+                    height: dp(26) if root.notes_div else 0
 
                 Label:
                     text: root.notes_div_txt
@@ -277,42 +413,103 @@ KV = """
                     height: self.texture_size[1]
                     text_size: self.width, None
                     halign: "left"
+                    color: 0.80, 0.83, 0.86, 1
 
                 BoxLayout:
                     size_hint_y: None
-                    height: dp(48)
-                    spacing: dp(10)
-                    Button:
+                    height: dp(50)
+                    padding: 0, dp(10), 0, 0
+                    GhostButton:
                         text: "Supprimer la position"
+                        color: 0.92, 0.38, 0.38, 1
                         on_release: root.supprimer()
+
+<NewsScreen>:
+    name: "news"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    BoxLayout:
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(64)
+            padding: dp(12), dp(10)
+            spacing: dp(8)
+            canvas.before:
+                Color:
+                    rgba: 0.10, 0.11, 0.14, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            GhostButton:
+                text: "<"
+                size_hint_x: 0.15
+                on_release: root.manager.current = "detail"
+            Label:
+                text: "Actualités — " + root.nom
+                bold: True
+                font_size: "16sp"
+                color: 0.95, 0.96, 0.97, 1
+                halign: "left"
+                text_size: self.size
+
+        Label:
+            text: root.statut_txt
+            color: 0.62, 0.65, 0.70, 1
+            size_hint_y: None
+            height: dp(30) if root.statut_txt else 0
+            font_size: "12sp"
+
+        ScrollView:
+            BoxLayout:
+                id: news_box
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(10), dp(4)
+                spacing: dp(8)
 
 <SettingsScreen>:
     name: "settings"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
     BoxLayout:
         orientation: "vertical"
-        padding: dp(20)
+        padding: dp(24)
         spacing: dp(14)
 
         Label:
             text: "Paramètres"
             font_size: "20sp"
             bold: True
+            color: 0.95, 0.96, 0.97, 1
             size_hint_y: None
             height: dp(40)
-
-        Label:
-            text: "Adresse du serveur scoring (server.py)"
-            size_hint_y: None
-            height: dp(24)
             halign: "left"
             text_size: self.size
+
+        SectionLabel:
+            text: "ADRESSE DU SERVEUR (server.py)"
 
         TextInput:
             id: url_input
             hint_text: "http://192.168.1.X:8765"
             multiline: False
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
+            background_color: 0.13, 0.145, 0.175, 1
+            foreground_color: 1, 1, 1, 1
+            hint_text_color: 0.55, 0.58, 0.62, 1
+            padding: dp(12), dp(14)
 
         Label:
             id: statut_label
@@ -320,55 +517,55 @@ KV = """
             color: root.statut_color
             size_hint_y: None
             height: dp(30)
+            font_size: "13sp"
 
         BoxLayout:
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
             spacing: dp(10)
-            Button:
-                text: "Tester la connexion"
+            GhostButton:
+                text: "Tester"
                 on_release: root.tester()
-            Button:
+            PillButton:
                 text: "Enregistrer"
                 on_release: root.enregistrer()
 
         Label:
             text:
-                ("Cette app ne fait tourner aucun calcul localement : "
-                "elle interroge un petit serveur (server.py) que tu lances "
-                "sur ton PC, ton VPS, ou Termux, et qui lui fait le vrai "
-                "travail (yfinance/pandas). Renseigne ici son adresse IP "
-                "et son port (8765 par défaut).")
+                ("Cette app ne fait tourner aucun calcul localement : elle "
+                "interroge un petit serveur (server.py) lancé sur ton PC, "
+                "ton VPS, ou Termux. Renseigne ici son adresse IP et son "
+                "port (8765 par défaut).")
             size_hint_y: None
             height: self.texture_size[1]
             text_size: self.width, None
             halign: "left"
-            font_size: "13sp"
-            color: 0.7, 0.7, 0.72, 1
+            font_size: "12sp"
+            color: 0.55, 0.58, 0.62, 1
 
         Widget:
 
-        Button:
+        GhostButton:
             text: "< Retour au portefeuille"
             size_hint_y: None
-            height: dp(48)
+            height: dp(50)
             on_release: root.manager.current = "portfolio"
 """
 
 
 def couleur_pv(valeur):
     if valeur is None:
-        return (1, 1, 1, 1)
+        return TXT_MUTED
     if valeur > 0:
-        return (0.30, 0.80, 0.40, 1)
+        return GREEN
     if valeur < 0:
-        return (0.90, 0.30, 0.30, 1)
-    return (1, 1, 1, 1)
+        return RED
+    return WHITE
 
 
 class PortfolioScreen(Screen):
     total_txt = StringProperty("")
-    total_color = ListProperty([1, 1, 1, 1])
+    total_color = ListProperty(list(WHITE))
     refreshing = BooleanProperty(False)
     erreur_globale = StringProperty("")
 
@@ -378,78 +575,103 @@ class PortfolioScreen(Screen):
     def rafraichir(self):
         if self.refreshing:
             return
-        self.refreshing = True
-        self.erreur_globale = ""
-        self.ids.liste_box.clear_widgets()
-        self.ids.liste_box.add_widget(
-            Label(text="Interrogation du serveur...", size_hint_y=None, height=60)
-        )
-        threading.Thread(target=self._charger_en_fond, daemon=True).start()
-
-    def _charger_en_fond(self):
-        settings = storage.charger_settings()
-        server_url = settings.get("server_url", "")
         positions = storage.charger_positions()
-        resultats = []
-        for pos in positions:
-            r = api_client.analyser_position(server_url, pos["ticker"], pos["quantite"], pos["pru"])
-            resultats.append(r)
-        self._afficher_resultats(resultats, server_url)
-
-    @mainthread
-    def _afficher_resultats(self, resultats, server_url):
         self.ids.liste_box.clear_widgets()
-        total_pv = 0.0
-        total_connu = False
-        erreurs_connexion = 0
+        self._rows = []
+        self._total_pv = 0.0
+        self._total_connu = False
+        self._erreurs = 0
 
-        if not resultats:
+        if not positions:
             self.ids.liste_box.add_widget(
                 Label(text="Aucune position. Appuie sur + Ajouter.",
-                      size_hint_y=None, height=80)
+                      size_hint_y=None, height=80, color=TXT_MUTED)
             )
+            self.total_txt = ""
+            return
 
-        for i, r in enumerate(resultats):
-            from kivy.factory import Factory
+        self.refreshing = True
+        self.erreur_globale = ""
+
+        for pos in positions:
             row = Factory.PositionRow()
-            row.ticker = r["ticker"]
-            row.nom = r.get("nom") or r["ticker"]
-            if r.get("erreur"):
-                if "injoignable" in r["erreur"] or "Timeout" in r["erreur"]:
-                    erreurs_connexion += 1
-                row.pv_mv_txt = "Erreur"
-                row.pv_mv_color = (0.9, 0.6, 0.2, 1)
-            elif r.get("pv_mv_eur") is not None:
-                total_pv += r["pv_mv_eur"]
-                total_connu = True
-                signe = "+" if r["pv_mv_eur"] >= 0 else ""
-                pct = r.get("pv_mv_pct")
-                pct_txt = f" ({signe}{pct:.1f}%)" if pct is not None else ""
-                row.pv_mv_txt = f"{signe}{r['pv_mv_eur']:.2f}{pct_txt}"
-                row.pv_mv_color = couleur_pv(r["pv_mv_eur"])
-            else:
-                row.pv_mv_txt = "N/A"
-            row.sante_txt = f"{r['note_sante']}" if r.get("note_sante") is not None else "N/A"
-            row.div_txt = f"{r['note_div']}" if r.get("note_div") is not None else "N/A"
-            row.verdict = r.get("verdict", "")
-
-            index = i
-            row.bind(on_touch_up=lambda inst, touch, idx=index, res=r:
-                      self._ouvrir_detail(idx, res) if inst.collide_point(*touch.pos) else None)
+            row.ticker = pos["ticker"]
+            row.nom = pos["ticker"]
+            row.pv_mv_txt = "…"
             self.ids.liste_box.add_widget(row)
+            self._rows.append(row)
 
-        if erreurs_connexion and erreurs_connexion == len(resultats) and resultats:
-            self.erreur_globale = f"Serveur injoignable à {server_url} — vérifie Paramètres."
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
+        threading.Thread(target=self._lancer_pool, args=(positions, server_url), daemon=True).start()
+
+    def _lancer_pool(self, positions, server_url):
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                executor.submit(api_client.analyser_position, server_url,
+                                 pos["ticker"], pos["quantite"], pos["pru"]): i
+                for i, pos in enumerate(positions)
+            }
+            for future in futures:
+                i = futures[future]
+                try:
+                    resultat = future.result()
+                except Exception as e:
+                    resultat = {"ticker": positions[i]["ticker"], "erreur": str(e)}
+                self._maj_ligne(i, resultat)
+        self._finaliser()
+
+    @mainthread
+    def _maj_ligne(self, index, r):
+        if index >= len(self._rows):
+            return
+        row = self._rows[index]
+        row.ticker = r.get("ticker", row.ticker)
+        row.nom = r.get("nom") or row.ticker
+
+        if r.get("erreur"):
+            err = r["erreur"] or ""
+            if "injoignable" in err or "timeout" in err.lower():
+                self._erreurs += 1
+            row.pv_mv_txt = "Erreur"
+            row.pv_mv_color = ORANGE
+            row.accent_color = ORANGE
+        elif r.get("pv_mv_eur") is not None:
+            self._total_pv += r["pv_mv_eur"]
+            self._total_connu = True
+            signe = "+" if r["pv_mv_eur"] >= 0 else ""
+            pct = r.get("pv_mv_pct")
+            pct_txt = f" ({signe}{pct:.1f}%)" if pct is not None else ""
+            row.pv_mv_txt = f"{signe}{r['pv_mv_eur']:.2f}{pct_txt}"
+            row.pv_mv_color = couleur_pv(r["pv_mv_eur"])
+            row.accent_color = couleur_pv(r["pv_mv_eur"])
+        else:
+            row.pv_mv_txt = "N/A"
+
+        row.sante_txt = f"{r['note_sante']}" if r.get("note_sante") is not None else "N/A"
+        row.div_txt = f"{r['note_div']}" if r.get("note_div") is not None else "N/A"
+        row.verdict = r.get("verdict", "")
+
+        row.bind(on_touch_up=lambda inst, touch, res=r:
+                  self._ouvrir_detail(res) if inst.collide_point(*touch.pos) else None)
+
+        self.total_txt = (f"PV/MV totale: {'+' if self._total_pv >= 0 else ''}{self._total_pv:.2f} €"
+                           if self._total_connu else "")
+        self.total_color = list(couleur_pv(self._total_pv if self._total_connu else None))
+
+    @mainthread
+    def _finaliser(self):
+        self.refreshing = False
+        if self._erreurs and self._erreurs == len(self._rows):
+            settings = storage.charger_settings()
+            self.erreur_globale = f"Serveur injoignable à {settings.get('server_url', '')} — vérifie Paramètres."
         else:
             self.erreur_globale = ""
 
-        self.total_txt = f"PV/MV totale: {'+' if total_pv >= 0 else ''}{total_pv:.2f} €" if total_connu else ""
-        self.total_color = couleur_pv(total_pv if total_connu else None)
-        self.refreshing = False
-
-    def _ouvrir_detail(self, index, resultat):
+    def _ouvrir_detail(self, resultat):
         detail = self.manager.get_screen("detail")
-        detail.charger(index, resultat)
+        detail.charger(resultat)
+        self.manager.transition = SlideTransition(direction="left")
         self.manager.current = "detail"
 
 
@@ -489,16 +711,18 @@ class AddPositionScreen(Screen):
 
 class DetailScreen(Screen):
     nom = StringProperty("")
+    ticker = StringProperty("")
     resume_txt = StringProperty("")
     notes_sante = ListProperty([])
     notes_div = ListProperty([])
     notes_sante_txt = StringProperty("")
     notes_div_txt = StringProperty("")
-    _index = None
+    _resultat = None
 
-    def charger(self, index, resultat):
-        self._index = index
+    def charger(self, resultat):
+        self._resultat = resultat
         self.nom = resultat.get("nom") or resultat.get("ticker", "")
+        self.ticker = resultat.get("ticker", "")
         r = resultat
 
         lignes = [f"[b]{r.get('nom')}[/b] ({r.get('ticker')})", ""]
@@ -527,7 +751,7 @@ class DetailScreen(Screen):
             note_s = r.get("note_sante")
             note_d = r.get("note_div")
             lignes.append(f"Note santé financière : {note_s}/10" if note_s is not None else "Note santé financière : N/A")
-            lignes.append(f"Note fiabilité dividende : {note_d}/10" if note_d is not None else "Note fiabilité dividende : N/A (pas de dividende ou données insuffisantes)")
+            lignes.append(f"Note fiabilité dividende : {note_d}/10" if note_d is not None else "Note fiabilité dividende : N/A")
             lignes.append(f"Verdict : {r.get('verdict', '')}")
 
         self.resume_txt = "\n".join(lignes)
@@ -536,15 +760,64 @@ class DetailScreen(Screen):
         self.notes_sante_txt = "\n".join(f"• {n}" for n in self.notes_sante) or "Données insuffisantes."
         self.notes_div_txt = "\n".join(f"• {n}" for n in self.notes_div) or "Données insuffisantes."
 
+    def ouvrir_actualites(self):
+        news_screen = self.manager.get_screen("news")
+        news_screen.charger(self.ticker, self.nom)
+        self.manager.transition = SlideTransition(direction="left")
+        self.manager.current = "news"
+
     def supprimer(self):
-        if self._index is not None:
-            storage.supprimer_position(self._index)
+        if self._resultat:
+            positions = storage.charger_positions()
+            ticker = self._resultat.get("ticker")
+            for i, p in enumerate(positions):
+                if p["ticker"] == ticker:
+                    storage.supprimer_position(i)
+                    break
         self.manager.current = "portfolio"
+
+
+class NewsScreen(Screen):
+    nom = StringProperty("")
+    statut_txt = StringProperty("")
+    _ticker = None
+
+    def charger(self, ticker, nom):
+        self._ticker = ticker
+        self.nom = nom
+        self.ids.news_box.clear_widgets()
+        self.statut_txt = "Chargement des actualités..."
+        threading.Thread(target=self._charger_en_fond, args=(ticker,), daemon=True).start()
+
+    def _charger_en_fond(self, ticker):
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
+        actus = api_client.obtenir_actualites(server_url, ticker)
+        self._afficher(actus)
+
+    @mainthread
+    def _afficher(self, actus):
+        self.ids.news_box.clear_widgets()
+        if not actus:
+            self.statut_txt = "Aucune actualité trouvée (ou serveur injoignable)."
+            return
+        self.statut_txt = ""
+        for item in actus:
+            row = Factory.NewsRow()
+            row.titre = item.get("titre", "")
+            row.editeur = item.get("editeur", "")
+            row.date_txt = item.get("date", "")
+            row.sentiment = item.get("sentiment", "neutre")
+            row.lien = item.get("lien", "")
+            if row.lien:
+                row.bind(on_touch_up=lambda inst, touch, url=row.lien:
+                          webbrowser.open(url) if inst.collide_point(*touch.pos) else None)
+            self.ids.news_box.add_widget(row)
 
 
 class SettingsScreen(Screen):
     statut_txt = StringProperty("")
-    statut_color = ListProperty([1, 1, 1, 1])
+    statut_color = ListProperty(list(WHITE))
 
     def on_pre_enter(self):
         settings = storage.charger_settings()
@@ -554,7 +827,7 @@ class SettingsScreen(Screen):
     def tester(self):
         url = self.ids.url_input.text.strip()
         self.statut_txt = "Test en cours..."
-        self.statut_color = (1, 1, 1, 1)
+        self.statut_color = list(WHITE)
         threading.Thread(target=self._tester_en_fond, args=(url,), daemon=True).start()
 
     def _tester_en_fond(self, url):
@@ -564,14 +837,14 @@ class SettingsScreen(Screen):
     @mainthread
     def _afficher_statut(self, ok, message):
         self.statut_txt = message
-        self.statut_color = (0.30, 0.80, 0.40, 1) if ok else (0.90, 0.30, 0.30, 1)
+        self.statut_color = list(GREEN) if ok else list(RED)
 
     def enregistrer(self):
         url = self.ids.url_input.text.strip()
         if url:
             storage.set_server_url(url)
             self.statut_txt = "Enregistré."
-            self.statut_color = (0.30, 0.80, 0.40, 1)
+            self.statut_color = list(GREEN)
 
 
 class SuiviBourseApp(App):
@@ -581,6 +854,7 @@ class SuiviBourseApp(App):
         sm.add_widget(PortfolioScreen())
         sm.add_widget(AddPositionScreen())
         sm.add_widget(DetailScreen())
+        sm.add_widget(NewsScreen())
         sm.add_widget(SettingsScreen())
         return sm
 
