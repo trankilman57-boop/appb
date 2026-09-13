@@ -1,0 +1,6 @@
+t212_api_key.txt
+cache.json
+*.pyc
+__pycache__/
+.buildozer/
+bin/
