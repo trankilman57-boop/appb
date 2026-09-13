@@ -158,6 +158,18 @@ KV = """
     date_txt: ""
     sentiment: "neutre"
     lien: ""
+    alerte: False
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(20) if root.alerte else 0
+        Label:
+            text: "⚠️ Actu récente pouvant impacter le cours"
+            font_size: "11sp"
+            bold: True
+            color: 0.95, 0.65, 0.25, 1
+            halign: "left"
+            text_size: self.size
 
     Label:
         text: root.titre
@@ -834,6 +846,7 @@ class NewsScreen(Screen):
             row.date_txt = item.get("date", "")
             row.sentiment = item.get("sentiment", "neutre")
             row.lien = item.get("lien", "")
+            row.alerte = bool(item.get("alerte", False))
             if row.lien:
                 row.bind(on_touch_up=lambda inst, touch, url=row.lien:
                           webbrowser.open(url) if inst.collide_point(*touch.pos) else None)
