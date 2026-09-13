@@ -836,6 +836,11 @@ class DetailScreen(Screen):
             couleur = "5ecc66" if au_dessus else "e04c4c"
             position = "au-dessus" if au_dessus else "en-dessous"
             lignes_tech.append(f"[color={couleur}]Cours actuellement {position} de sa SMA200[/color]")
+        croisement = r.get("sma50_au_dessus_sma200")
+        if croisement is not None:
+            couleur = "5ecc66" if croisement else "e04c4c"
+            etat = "SMA50 au-dessus de la SMA200 (config. haussière)" if croisement else "SMA50 en-dessous de la SMA200 (config. baissière)"
+            lignes_tech.append(f"[color={couleur}]{etat}[/color]")
         ratio_vol = r.get("ratio_volume")
         if ratio_vol is not None:
             lignes_tech.append(f"Volume vs moyenne : x{ratio_vol:.1f}")
