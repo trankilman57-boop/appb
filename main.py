@@ -360,6 +360,24 @@ KV = """
                 text: "Ajouter"
                 on_release: root.ajouter()
 
+        SectionLabel:
+            text: "OU"
+
+        Label:
+            id: import_statut_label
+            text: root.import_statut_txt
+            color: root.import_statut_color
+            size_hint_y: None
+            height: dp(26) if root.import_statut_txt else 0
+            font_size: "12sp"
+
+        GhostButton:
+            text: "⇩ Importer depuis Trading212"
+            size_hint_y: None
+            height: dp(50)
+            disabled: root.import_en_cours
+            on_release: root.importer_t212()
+
         Widget:
 
 <DetailScreen>:
@@ -747,6 +765,10 @@ class PortfolioScreen(Screen):
 
 
 class AddPositionScreen(Screen):
+    import_statut_txt = StringProperty("")
+    import_statut_color = ListProperty(list(WHITE))
+    import_en_cours = BooleanProperty(False)
+
     def annuler(self):
         self.ids.ticker_input.text = ""
         self.ids.quantite_input.text = ""
@@ -778,6 +800,50 @@ class AddPositionScreen(Screen):
         self.ids.pru_input.text = ""
         self.ids.erreur_label.text = ""
         self.manager.current = "portfolio"
+
+    def importer_t212(self):
+        self.import_en_cours = True
+        self.import_statut_txt = "Import en cours..."
+        self.import_statut_color = list(WHITE)
+        threading.Thread(target=self._importer_t212_en_fond, daemon=True).start()
+
+    def _importer_t212_en_fond(self):
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
+        positions, erreur = api_client.obtenir_portefeuille_t212(server_url)
+        self._traiter_import(positions, erreur)
+
+    @mainthread
+    def _traiter_import(self, positions, erreur):
+        self.import_en_cours = False
+        if erreur:
+            self.import_statut_txt = f"Échec : {erreur}"
+            self.import_statut_color = list(RED)
+            return
+        if not positions:
+            self.import_statut_txt = "Aucune position trouvée sur Trading212."
+            self.import_statut_color = list(ORANGE)
+            return
+
+        existantes = {p["ticker"].upper() for p in storage.charger_positions()}
+        ajoutees = 0
+        for p in positions:
+            ticker = p.get("ticker", "").strip().upper()
+            if not ticker or ticker in existantes:
+                continue
+            try:
+                storage.ajouter_position(ticker, p["quantite"], p["pru"],
+                                          date_achat=datetime.now().strftime("%Y-%m-%d"))
+                ajoutees += 1
+                existantes.add(ticker)
+            except Exception:
+                continue
+
+        self.import_statut_txt = (
+            f"{ajoutees} position(s) importée(s) sur {len(positions)} trouvée(s). "
+            "Vérifie les tickers convertis dans le portefeuille."
+        )
+        self.import_statut_color = list(GREEN)
 
 
 class DetailScreen(Screen):

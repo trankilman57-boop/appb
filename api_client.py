@@ -53,6 +53,25 @@ def obtenir_actualites(server_url, ticker, limit=6):
         return []
 
 
+def obtenir_portefeuille_t212(server_url):
+    """Appelle GET {server_url}/t212/portefeuille.
+    Retourne (positions, erreur) où positions est une liste de dicts
+    {ticker, quantite, pru}, erreur est None si tout s'est bien passé."""
+    url = server_url.rstrip("/") + "/t212/portefeuille"
+    try:
+        resp = requests.get(url, timeout=20)
+        data = resp.json()
+        if resp.status_code != 200:
+            return [], data.get("erreur", f"Erreur serveur ({resp.status_code})")
+        return data.get("positions", []), data.get("erreur")
+    except requests.exceptions.ConnectionError:
+        return [], "Serveur injoignable — vérifie l'adresse dans Paramètres."
+    except requests.exceptions.Timeout:
+        return [], "Le serveur met trop de temps à répondre (timeout)."
+    except Exception as e:
+        return [], str(e)
+
+
 def tester_connexion(server_url):
     """Vérifie que le serveur répond. Retourne (ok: bool, message: str)."""
     url = server_url.rstrip("/") + "/health"
