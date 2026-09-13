@@ -93,6 +93,7 @@ KV = """
     sante_txt: "…"
     div_txt: "…"
     verdict: ""
+    a_des_alertes: False
 
     BoxLayout:
         size_hint_y: 0.55
@@ -134,7 +135,7 @@ KV = """
             halign: "left"
             text_size: self.size
         Label:
-            text: root.verdict
+            text: root.verdict + ("  ⚠" if root.a_des_alertes else "")
             font_size: "12sp"
             halign: "right"
             text_size: self.size
@@ -405,6 +406,27 @@ KV = """
                     text_size: self.width, None
                     halign: "left"
                     color: 0.90, 0.92, 0.94, 1
+
+                Label:
+                    text: root.alertes_txt
+                    markup: True
+                    size_hint_y: None
+                    height: self.texture_size[1] if root.alertes_txt else 0
+                    text_size: self.width, None
+                    halign: "left"
+
+                SectionLabel:
+                    text: "ANALYSE TECHNIQUE"
+                    height: dp(26) if root.technique_txt else 0
+
+                Label:
+                    text: root.technique_txt
+                    markup: True
+                    size_hint_y: None
+                    height: self.texture_size[1]
+                    text_size: self.width, None
+                    halign: "left"
+                    color: 0.80, 0.83, 0.86, 1
 
                 SectionLabel:
                     text: "POINTS CLÉS — SANTÉ FINANCIÈRE"
@@ -688,6 +710,7 @@ class PortfolioScreen(Screen):
         row.sante_txt = f"{r['note_sante']}" if r.get("note_sante") is not None else "N/A"
         row.div_txt = f"{r['note_div']}" if r.get("note_div") is not None else "N/A"
         row.verdict = r.get("verdict", "")
+        row.a_des_alertes = bool(r.get("alertes"))
 
         row.bind(on_touch_up=lambda inst, touch, res=r:
                   self._ouvrir_detail(res) if inst.collide_point(*touch.pos) else None)
@@ -755,6 +778,8 @@ class DetailScreen(Screen):
     notes_div = ListProperty([])
     notes_sante_txt = StringProperty("")
     notes_div_txt = StringProperty("")
+    technique_txt = StringProperty("")
+    alertes_txt = StringProperty("")
     _resultat = None
 
     def charger(self, resultat):
@@ -797,6 +822,34 @@ class DetailScreen(Screen):
         self.notes_div = r.get("notes_div", [])
         self.notes_sante_txt = "\n".join(f"• {n}" for n in self.notes_sante) or "Données insuffisantes."
         self.notes_div_txt = "\n".join(f"• {n}" for n in self.notes_div) or "Données insuffisantes."
+
+        # --- Analyse technique (SMA50/SMA200, volume) ---
+        lignes_tech = []
+        sma50 = r.get("sma50")
+        sma200 = r.get("sma200")
+        if sma50 is not None:
+            lignes_tech.append(f"Moyenne mobile 50j : {sma50:.2f}")
+        if sma200 is not None:
+            lignes_tech.append(f"Moyenne mobile 200j : {sma200:.2f}")
+        au_dessus = r.get("au_dessus_sma200")
+        if au_dessus is not None:
+            couleur = "5ecc66" if au_dessus else "e04c4c"
+            position = "au-dessus" if au_dessus else "en-dessous"
+            lignes_tech.append(f"[color={couleur}]Cours actuellement {position} de sa SMA200[/color]")
+        ratio_vol = r.get("ratio_volume")
+        if ratio_vol is not None:
+            lignes_tech.append(f"Volume vs moyenne : x{ratio_vol:.1f}")
+        self.technique_txt = "\n".join(lignes_tech)
+
+        # --- Alertes actives ---
+        alertes = r.get("alertes", [])
+        if alertes:
+            lignes_alertes = ["[b][color=f2a63f]⚠ ALERTES ACTIVES[/color][/b]"]
+            for a in alertes:
+                lignes_alertes.append(f"[color=f2a63f]• {a.get('message', '')}[/color]")
+            self.alertes_txt = "\n".join(lignes_alertes)
+        else:
+            self.alertes_txt = ""
 
     def ouvrir_actualites(self):
         news_screen = self.manager.get_screen("news")
