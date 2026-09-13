@@ -22,6 +22,7 @@ from datetime import datetime
 
 from kivy.app import App
 from kivy.clock import mainthread, Clock
+from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
@@ -1191,6 +1192,18 @@ class SettingsScreen(Screen):
 
 
 class SuiviBourseApp(App):
+    # Écran parent de chaque écran, pour que le bouton retour Android
+    # remonte dans la hiérarchie de navigation au lieu de fermer l'app.
+    # Un écran absent de cette table (ex: "portfolio", l'écran racine)
+    # laisse le comportement par défaut d'Android s'exécuter (fermer l'app).
+    _ECRAN_PARENT = {
+        "add": "portfolio",
+        "settings": "portfolio",
+        "detail": "portfolio",
+        "news": "detail",
+        "analystes": "detail",
+    }
+
     def build(self):
         Builder.load_string(KV)
         sm = ScreenManager()
@@ -1200,7 +1213,20 @@ class SuiviBourseApp(App):
         sm.add_widget(NewsScreen())
         sm.add_widget(AnalystesScreen())
         sm.add_widget(SettingsScreen())
+        Window.bind(on_keyboard=self._on_keyboard)
         return sm
+
+    def _on_keyboard(self, window, key, *args):
+        # keycode 27 = touche "retour" Android (mappée sur Escape par Kivy)
+        if key == 27:
+            ecran_actuel = self.root.current
+            ecran_parent = self._ECRAN_PARENT.get(ecran_actuel)
+            if ecran_parent:
+                self.root.transition = SlideTransition(direction="right")
+                self.root.current = ecran_parent
+                return True  # événement consommé : on ne ferme pas l'app
+            return False  # sur l'écran racine : comportement Android normal (quitter)
+        return False
 
 
 if __name__ == "__main__":
