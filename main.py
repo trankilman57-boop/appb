@@ -188,7 +188,7 @@ KV = """
         height: dp(22)
         spacing: dp(8)
         Label:
-            text: root.editeur + (" · " + root.source if root.source else "") + ("  •  " + root.date_txt if root.date_txt else "")
+            text: root.editeur + ("  •  " + root.date_txt if root.date_txt else "")
             font_size: "11sp"
             color: 0.62, 0.65, 0.70, 1
             halign: "left"
@@ -199,6 +199,16 @@ KV = """
             halign: "right"
             text_size: self.size
             size_hint_x: 0.4
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(18) if root.source else 0
+        Label:
+            text: root.source
+            font_size: "10sp"
+            color: 0.45, 0.48, 0.52, 1
+            halign: "left"
+            text_size: self.size
 
 <PortfolioScreen>:
     name: "portfolio"
@@ -686,7 +696,7 @@ class PortfolioScreen(Screen):
 
         prix = r.get("prix_actuel")
         devise = r.get("devise") or ""
-        row.prix_txt = f"{prix} {devise}".strip() if prix is not None else ""
+        row.prix_txt = f"{prix:.2f} {devise}".strip() if prix is not None else ""
 
         if r.get("erreur"):
             err = r["erreur"] or ""
@@ -794,7 +804,7 @@ class DetailScreen(Screen):
         else:
             prix = r.get("prix_actuel")
             devise = r.get("devise") or ""
-            lignes.append(f"Prix actuel : {prix} {devise}" if prix is not None else "Prix actuel : N/A")
+            lignes.append(f"Prix actuel : {prix:.2f} {devise}" if prix is not None else "Prix actuel : N/A")
             if r.get("valeur_position") is not None:
                 lignes.append(f"Valeur position : {r['valeur_position']:.2f} {devise}")
             if r.get("pv_mv_eur") is not None:
@@ -807,7 +817,7 @@ class DetailScreen(Screen):
             if r.get("prochain_dividende_date"):
                 lignes.append(f"Prochain détachement (ex-div) : {r['prochain_dividende_date']}")
             if r.get("prochain_dividende_montant"):
-                lignes.append(f"Dividende annuel estimé : {r['prochain_dividende_montant']} / action")
+                lignes.append(f"Dividende annuel estimé : {r['prochain_dividende_montant']:.2f} / action")
             if r.get("rendement_pct") is not None:
                 lignes.append(f"Rendement actuel : {r['rendement_pct']:.2f}%")
             lignes.append("")
