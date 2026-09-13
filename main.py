@@ -159,6 +159,7 @@ KV = """
     sentiment: "neutre"
     lien: ""
     alerte: False
+    source: ""
 
     BoxLayout:
         size_hint_y: None
@@ -186,7 +187,7 @@ KV = """
         height: dp(22)
         spacing: dp(8)
         Label:
-            text: root.editeur + ("  •  " + root.date_txt if root.date_txt else "")
+            text: root.editeur + (" · " + root.source if root.source else "") + ("  •  " + root.date_txt if root.date_txt else "")
             font_size: "11sp"
             color: 0.62, 0.65, 0.70, 1
             halign: "left"
@@ -847,6 +848,7 @@ class NewsScreen(Screen):
             row.sentiment = item.get("sentiment", "neutre")
             row.lien = item.get("lien", "")
             row.alerte = bool(item.get("alerte", False))
+            row.source = item.get("source", "")
             if row.lien:
                 row.bind(on_touch_up=lambda inst, touch, url=row.lien:
                           webbrowser.open(url) if inst.collide_point(*touch.pos) else None)
