@@ -67,7 +67,7 @@ KV = """
 <PositionRow@BoxLayout>:
     orientation: "vertical"
     size_hint_y: None
-    height: dp(100)
+    height: dp(118)
     padding: dp(14), dp(10)
     spacing: dp(4)
     canvas.before:
@@ -87,6 +87,7 @@ KV = """
     ticker: ""
     nom: ""
     prix_txt: ""
+    quantite_txt: ""
     pv_mv_txt: "..."
     pv_mv_color: 0.62, 0.65, 0.70, 1
     accent_color: 0.30, 0.62, 0.98, 1
@@ -96,7 +97,7 @@ KV = """
     a_des_alertes: False
 
     BoxLayout:
-        size_hint_y: 0.55
+        size_hint_y: 0.35
         Label:
             text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
             markup: True
@@ -118,7 +119,16 @@ KV = """
             size_hint_x: 0.5
 
     BoxLayout:
-        size_hint_y: 0.45
+        size_hint_y: 0.30
+        Label:
+            text: (root.quantite_txt + " actions" if root.quantite_txt else "")
+            font_size: "12sp"
+            color: 0.62, 0.65, 0.70, 1
+            halign: "left"
+            text_size: self.size
+
+    BoxLayout:
+        size_hint_y: 0.35
         spacing: dp(10)
         Label:
             text: "[color=9fa3ab]Santé[/color]  [b]" + root.sante_txt + "[/b]/10"
@@ -681,6 +691,10 @@ class PortfolioScreen(Screen):
             row.ticker = pos["ticker"]
             row.nom = pos["ticker"]
             row.pv_mv_txt = "…"
+            quantite = pos.get("quantite")
+            if quantite is not None:
+                # Affichage sans décimales inutiles si quantité entière
+                row.quantite_txt = f"{quantite:g}"
             self.ids.liste_box.add_widget(row)
             self._rows.append(row)
 
@@ -827,6 +841,7 @@ class AddPositionScreen(Screen):
 
         existantes = {p["ticker"].upper() for p in storage.charger_positions()}
         ajoutees = 0
+        non_resolus = []
         for p in positions:
             ticker = p.get("ticker", "").strip().upper()
             if not ticker or ticker in existantes:
@@ -836,14 +851,21 @@ class AddPositionScreen(Screen):
                                           date_achat=datetime.now().strftime("%Y-%m-%d"))
                 ajoutees += 1
                 existantes.add(ticker)
+                # Si le ticker importé est identique au ticker T212 brut,
+                # c'est que la conversion (générique + ISIN) a échoué.
+                if ticker == p.get("ticker_t212_origine", "").upper():
+                    non_resolus.append(ticker)
             except Exception:
                 continue
 
-        self.import_statut_txt = (
-            f"{ajoutees} position(s) importée(s) sur {len(positions)} trouvée(s). "
-            "Vérifie les tickers convertis dans le portefeuille."
-        )
-        self.import_statut_color = list(GREEN)
+        message = f"{ajoutees} position(s) importée(s) sur {len(positions)} trouvée(s)."
+        if non_resolus:
+            message += (f" ⚠ {len(non_resolus)} ticker(s) non résolu(s), à corriger "
+                        f"manuellement : {', '.join(non_resolus)}")
+            self.import_statut_color = list(ORANGE)
+        else:
+            self.import_statut_color = list(GREEN)
+        self.import_statut_txt = message
 
 
 class DetailScreen(Screen):
