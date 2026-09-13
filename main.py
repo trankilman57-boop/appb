@@ -425,8 +425,12 @@ KV = """
                 text_size: self.size
             PillButton:
                 text: "Actus"
-                size_hint_x: 0.3
+                size_hint_x: 0.25
                 on_release: root.ouvrir_actualites()
+            GhostButton:
+                text: "Analystes"
+                size_hint_x: 0.3
+                on_release: root.ouvrir_analystes()
 
         ScrollView:
             BoxLayout:
@@ -548,6 +552,73 @@ KV = """
                 height: self.minimum_height
                 padding: dp(10), dp(4)
                 spacing: dp(8)
+
+<AnalystesScreen>:
+    name: "analystes"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    BoxLayout:
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(64)
+            padding: dp(12), dp(10)
+            spacing: dp(8)
+            canvas.before:
+                Color:
+                    rgba: 0.10, 0.11, 0.14, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            GhostButton:
+                text: "<"
+                size_hint_x: 0.15
+                on_release: root.manager.current = "detail"
+            Label:
+                text: "Analystes — " + root.nom
+                bold: True
+                font_size: "16sp"
+                color: 0.95, 0.96, 0.97, 1
+                halign: "left"
+                text_size: self.size
+
+        Label:
+            text: root.statut_txt
+            color: 0.62, 0.65, 0.70, 1
+            size_hint_y: None
+            height: dp(30) if root.statut_txt else 0
+            font_size: "12sp"
+
+        ScrollView:
+            BoxLayout:
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(16)
+                spacing: dp(12)
+
+                Label:
+                    text: root.contenu_txt
+                    markup: True
+                    size_hint_y: None
+                    height: self.texture_size[1]
+                    text_size: self.width, None
+                    halign: "left"
+                    color: 0.90, 0.92, 0.94, 1
+
+                Label:
+                    text: root.source_txt
+                    font_size: "11sp"
+                    color: 0.45, 0.48, 0.52, 1
+                    size_hint_y: None
+                    height: self.texture_size[1] if root.source_txt else 0
+                    text_size: self.width, None
+                    halign: "left"
 
 <SettingsScreen>:
     name: "settings"
@@ -877,6 +948,7 @@ class DetailScreen(Screen):
     notes_sante_txt = StringProperty("")
     notes_div_txt = StringProperty("")
     technique_txt = StringProperty("")
+    analystes_txt = StringProperty("")
     alertes_txt = StringProperty("")
     _resultat = None
 
@@ -890,6 +962,15 @@ class DetailScreen(Screen):
         if r.get("erreur"):
             lignes.append(f"[color=e04c4c]Erreur: {r['erreur']}[/color]")
         else:
+            positions_locales = storage.charger_positions()
+            quantite_detenue = None
+            for p in positions_locales:
+                if p["ticker"].upper() == r.get("ticker", "").upper():
+                    quantite_detenue = p.get("quantite")
+                    break
+            if quantite_detenue is not None:
+                lignes.append(f"Quantité détenue : {quantite_detenue:g} actions")
+
             prix = r.get("prix_actuel")
             devise = r.get("devise") or ""
             lignes.append(f"Prix actuel : {prix:.2f} {devise}" if prix is not None else "Prix actuel : N/A")
@@ -960,6 +1041,12 @@ class DetailScreen(Screen):
         self.manager.transition = SlideTransition(direction="left")
         self.manager.current = "news"
 
+    def ouvrir_analystes(self):
+        analystes_screen = self.manager.get_screen("analystes")
+        analystes_screen.charger(self.ticker, self.nom, self._resultat.get("devise") if self._resultat else "")
+        self.manager.transition = SlideTransition(direction="left")
+        self.manager.current = "analystes"
+
     def supprimer(self):
         if self._resultat:
             positions = storage.charger_positions()
@@ -1011,6 +1098,66 @@ class NewsScreen(Screen):
             self.ids.news_box.add_widget(row)
 
 
+class AnalystesScreen(Screen):
+    nom = StringProperty("")
+    statut_txt = StringProperty("")
+    contenu_txt = StringProperty("")
+    source_txt = StringProperty("")
+    _ticker = None
+    _devise = ""
+
+    def charger(self, ticker, nom, devise=""):
+        self._ticker = ticker
+        self._devise = devise or ""
+        self.nom = nom
+        self.contenu_txt = ""
+        self.statut_txt = "Chargement des avis analystes..."
+        threading.Thread(target=self._charger_en_fond, args=(ticker,), daemon=True).start()
+
+    def _charger_en_fond(self, ticker):
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
+        avis = api_client.obtenir_avis_analystes(server_url, ticker)
+        self._afficher(avis)
+
+    @mainthread
+    def _afficher(self, avis):
+        if not avis:
+            self.statut_txt = "Aucun avis analyste disponible pour ce titre."
+            self.contenu_txt = ""
+            self.source_txt = ""
+            return
+
+        self.statut_txt = ""
+        lignes = []
+
+        # Cas Finnhub : répartition détaillée des recommandations
+        if avis.get("strong_buy") is not None:
+            total = avis.get("nb_analystes") or 0
+            lignes.append(f"[b]{total} analyste(s)[/b]" + (f" — période {avis['periode']}" if avis.get("periode") else ""))
+            lignes.append("")
+            lignes.append(f"🟢 Achat fort : {avis.get('strong_buy', 0)}")
+            lignes.append(f"🟢 Achat : {avis.get('buy', 0)}")
+            lignes.append(f"⚪ Conserver : {avis.get('hold', 0)}")
+            lignes.append(f"🔴 Vente : {avis.get('sell', 0)}")
+            lignes.append(f"🔴 Vente forte : {avis.get('strong_sell', 0)}")
+        # Cas repli yfinance : juste un consensus global
+        elif avis.get("consensus"):
+            lignes.append(f"Consensus : [b]{avis['consensus']}[/b]"
+                           + (f" ({avis['nb_analystes']} analystes)" if avis.get("nb_analystes") else ""))
+
+        prix_cible = avis.get("prix_cible_moyen")
+        if prix_cible:
+            lignes.append("")
+            ligne_cible = f"Objectif de cours moyen : [b]{prix_cible:.2f} {self._devise}[/b]"
+            if avis.get("prix_cible_bas") and avis.get("prix_cible_haut"):
+                ligne_cible += f"\n(entre {avis['prix_cible_bas']:.2f} et {avis['prix_cible_haut']:.2f})"
+            lignes.append(ligne_cible)
+
+        self.contenu_txt = "\n".join(lignes) if lignes else "Données incomplètes."
+        self.source_txt = f"Source : {avis.get('source', 'inconnue')}"
+
+
 class SettingsScreen(Screen):
     statut_txt = StringProperty("")
     statut_color = ListProperty(list(WHITE))
@@ -1051,6 +1198,7 @@ class SuiviBourseApp(App):
         sm.add_widget(AddPositionScreen())
         sm.add_widget(DetailScreen())
         sm.add_widget(NewsScreen())
+        sm.add_widget(AnalystesScreen())
         sm.add_widget(SettingsScreen())
         return sm
 
