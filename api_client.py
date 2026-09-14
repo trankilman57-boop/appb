@@ -117,6 +117,6 @@ def _erreur(ticker, message):
         "note_div": None,
         "notes_sante": [],
         "notes_div": [],
-        "verdict": "⚪ Erreur",
+        "verdict": "N/A Erreur",
         "erreur": message,
     }

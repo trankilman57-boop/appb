@@ -146,7 +146,8 @@ KV = """
             halign: "left"
             text_size: self.size
         Label:
-            text: root.verdict + ("  ⚠" if root.a_des_alertes else "")
+            markup: True
+            text: ("[color=4caf50]" if root.verdict.startswith("OK") else "[color=e05555]" if root.verdict.startswith("KO") else "[color=f2a63f]" if root.verdict.startswith("MOYEN") else "[color=9fa3ab]") + (root.verdict.split(" ", 1)[-1] if " " in root.verdict else root.verdict) + "[/color]" + ("  [color=f2a63f][b]![/b][/color]" if root.a_des_alertes else "")
             font_size: "12sp"
             halign: "right"
             text_size: self.size
@@ -176,8 +177,9 @@ KV = """
     BoxLayout:
         size_hint_y: None
         height: dp(20) if root.alerte else 0
+        opacity: 1 if root.alerte else 0
         Label:
-            text: "⚠️ Actu récente pouvant impacter le cours"
+            text: "! Actu récente pouvant impacter le cours" if root.alerte else ""
             font_size: "11sp"
             bold: True
             color: 0.95, 0.65, 0.25, 1
@@ -205,7 +207,8 @@ KV = """
             halign: "left"
             text_size: self.size
         Label:
-            text: ("🟢 Positif" if root.sentiment == "positif" else "🔴 Négatif" if root.sentiment == "negatif" else "⚪ Neutre")
+            markup: True
+            text: ("[color=4caf50]Positif[/color]" if root.sentiment == "positif" else "[color=e05555]Négatif[/color]" if root.sentiment == "negatif" else "[color=9fa3ab]Neutre[/color]")
             font_size: "11sp"
             halign: "right"
             text_size: self.size
@@ -932,7 +935,7 @@ class AddPositionScreen(Screen):
 
         message = f"{ajoutees} position(s) importée(s) sur {len(positions)} trouvée(s)."
         if non_resolus:
-            message += (f" ⚠ {len(non_resolus)} ticker(s) non résolu(s), à corriger "
+            message += (f" ! {len(non_resolus)} ticker(s) non résolu(s), à corriger "
                         f"manuellement : {', '.join(non_resolus)}")
             self.import_statut_color = list(ORANGE)
         else:
@@ -1029,7 +1032,7 @@ class DetailScreen(Screen):
         # --- Alertes actives ---
         alertes = r.get("alertes", [])
         if alertes:
-            lignes_alertes = ["[b][color=f2a63f]⚠ ALERTES ACTIVES[/color][/b]"]
+            lignes_alertes = ["[b][color=f2a63f]! ALERTES ACTIVES[/color][/b]"]
             for a in alertes:
                 lignes_alertes.append(f"[color=f2a63f]• {a.get('message', '')}[/color]")
             self.alertes_txt = "\n".join(lignes_alertes)
@@ -1137,11 +1140,11 @@ class AnalystesScreen(Screen):
             total = avis.get("nb_analystes") or 0
             lignes.append(f"[b]{total} analyste(s)[/b]" + (f" — période {avis['periode']}" if avis.get("periode") else ""))
             lignes.append("")
-            lignes.append(f"🟢 Achat fort : {avis.get('strong_buy', 0)}")
-            lignes.append(f"🟢 Achat : {avis.get('buy', 0)}")
-            lignes.append(f"⚪ Conserver : {avis.get('hold', 0)}")
-            lignes.append(f"🔴 Vente : {avis.get('sell', 0)}")
-            lignes.append(f"🔴 Vente forte : {avis.get('strong_sell', 0)}")
+            lignes.append(f"[color=4caf50]Achat fort[/color] : {avis.get('strong_buy', 0)}")
+            lignes.append(f"[color=4caf50]Achat[/color] : {avis.get('buy', 0)}")
+            lignes.append(f"[color=9fa3ab]Conserver[/color] : {avis.get('hold', 0)}")
+            lignes.append(f"[color=e05555]Vente[/color] : {avis.get('sell', 0)}")
+            lignes.append(f"[color=e05555]Vente forte[/color] : {avis.get('strong_sell', 0)}")
         # Cas repli yfinance : juste un consensus global
         elif avis.get("consensus"):
             lignes.append(f"Consensus : [b]{avis['consensus']}[/b]"
