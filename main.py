@@ -71,13 +71,23 @@ def initiales_depuis_nom(nom):
     return (mots[0][0] + mots[1][0]).upper()
 
 
-def date_debut_dividendes_mois_precedent():
-    """1er jour du mois précédent le mois en cours (pas de borne
-    supérieure : les versements futurs/prévus restent tous affichés)."""
+def fenetre_dividendes():
+    """Retourne (date_debut, date_fin) : du 1er jour du mois précédent le
+    mois en cours, jusqu'au dernier jour du 4e mois suivant le mois en
+    cours (borne exclusive). Ex. si on est en septembre 2026 :
+    01/08/2026 -> 01/02/2027 (exclu), donc jusqu'à fin janvier 2027."""
     aujourdhui = date.today()
+
     annee_debut = aujourdhui.year if aujourdhui.month > 1 else aujourdhui.year - 1
     mois_debut = aujourdhui.month - 1 if aujourdhui.month > 1 else 12
-    return date(annee_debut, mois_debut, 1)
+    date_debut = date(annee_debut, mois_debut, 1)
+
+    mois_total = aujourdhui.month + 4  # +4 mois après le mois en cours
+    annee_fin = aujourdhui.year + (mois_total - 1) // 12
+    mois_fin = (mois_total - 1) % 12 + 1
+    date_fin = date(annee_fin, mois_fin, 1)  # borne exclusive
+
+    return date_debut, date_fin
 
 KV = """
 #:import dp kivy.metrics.dp
@@ -1206,7 +1216,7 @@ class PortfolioScreen(Screen):
             t: PALETTE_AVATARS[i % len(PALETTE_AVATARS)] for i, t in enumerate(tickers_tries)
         }
 
-        date_debut = date_debut_dividendes_mois_precedent()
+        date_debut, date_fin = fenetre_dividendes()
 
         evenements_par_date = {}
         for ticker, liste in (data or {}).items():
@@ -1221,8 +1231,9 @@ class PortfolioScreen(Screen):
                 if not date_iso or montant is None:
                     continue
                 try:
-                    if datetime.strptime(date_iso, "%Y-%m-%d").date() < date_debut:
-                        continue  # trop ancien : hors fenêtre (mois précédent -> pas de limite future)
+                    d = datetime.strptime(date_iso, "%Y-%m-%d").date()
+                    if d < date_debut or d >= date_fin:
+                        continue  # hors fenêtre : mois précédent -> 4 mois après le mois en cours
                 except ValueError:
                     continue
                 evenements_par_date.setdefault(date_iso, []).append({
