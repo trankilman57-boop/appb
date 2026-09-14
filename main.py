@@ -119,8 +119,8 @@ KV = """
 <PositionRow@BoxLayout>:
     orientation: "horizontal"
     size_hint_y: None
-    height: dp(118)
-    padding: dp(14), dp(10)
+    height: dp(126)
+    padding: dp(14), dp(12)
     spacing: dp(12)
     canvas.before:
         Color:
@@ -161,10 +161,11 @@ KV = """
 
     BoxLayout:
         orientation: "vertical"
-        spacing: dp(4)
+        spacing: dp(6)
 
         BoxLayout:
-            size_hint_y: 0.35
+            size_hint_y: 0.34
+            padding: 0, dp(3), 0, 0
             Label:
                 text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
                 markup: True
@@ -186,7 +187,7 @@ KV = """
                 size_hint_x: 0.5
 
         BoxLayout:
-            size_hint_y: 0.30
+            size_hint_y: 0.28
             Label:
                 text: (root.quantite_txt + " actions" if root.quantite_txt else "")
                 font_size: "12sp"
@@ -523,7 +524,7 @@ KV = """
                         size_hint: None, None
                         size: dp(22), dp(22)
                         couleur: 0.85, 0.87, 0.90, 1
-                    couleur_fond: 0.18, 0.20, 0.24, 1
+                        couleur_fond: 0.18, 0.20, 0.24, 1
 
         BoxLayout:
             size_hint_y: None
@@ -695,6 +696,31 @@ KV = """
             on_release: root.importer_t212()
 
         Widget:
+
+<NoteTile@BoxLayout>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: max(dp(34), label_note.texture_size[1] + dp(16))
+    padding: dp(12), dp(8)
+    spacing: dp(8)
+    texte: ""
+    canvas.before:
+        Color:
+            rgba: 0.13, 0.145, 0.175, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(10)]
+    Label:
+        id: label_note
+        text: root.texte
+        font_size: "13sp"
+        color: 0.78, 0.80, 0.82, 1
+        halign: "left"
+        valign: "middle"
+        text_size: self.width, None
+        size_hint_y: None
+        height: self.texture_size[1]
 
 <DetailScreen>:
     name: "detail"
@@ -901,27 +927,23 @@ KV = """
                     text: "POINTS CLÉS — SANTÉ FINANCIÈRE"
                     height: dp(26) if root.notes_sante else 0
 
-                Label:
-                    text: root.notes_sante_txt
+                BoxLayout:
+                    id: notes_sante_box
+                    orientation: "vertical"
                     size_hint_y: None
-                    height: self.texture_size[1]
-                    text_size: self.width, None
-                    halign: "left"
-                    color: 0.78, 0.80, 0.82, 1
-                    font_size: "13sp"
+                    height: self.minimum_height
+                    spacing: dp(6)
 
                 SectionLabel:
                     text: "POINTS CLÉS — FIABILITÉ DIVIDENDE"
                     height: dp(26) if root.notes_div else 0
 
-                Label:
-                    text: root.notes_div_txt
+                BoxLayout:
+                    id: notes_div_box
+                    orientation: "vertical"
                     size_hint_y: None
-                    height: self.texture_size[1]
-                    text_size: self.width, None
-                    halign: "left"
-                    color: 0.78, 0.80, 0.82, 1
-                    font_size: "13sp"
+                    height: self.minimum_height
+                    spacing: dp(6)
 
                 SectionLabel:
                     text: "ANALYSE TECHNIQUE"
@@ -1686,6 +1708,14 @@ class DetailScreen(Screen):
     verdict_bg = ListProperty([0, 0, 0, 0])
     _resultat = None
 
+    def _peupler_tuiles_notes(self, box, notes):
+        box.clear_widgets()
+        liste = notes or ["Données insuffisantes."]
+        for n in liste:
+            tuile = Factory.NoteTile()
+            tuile.texte = f"• {n}"
+            box.add_widget(tuile)
+
     def charger(self, resultat):
         self._resultat = resultat
         self.nom = resultat.get("nom") or resultat.get("ticker", "")
@@ -1735,6 +1765,8 @@ class DetailScreen(Screen):
         self.notes_div = r.get("notes_div", [])
         self.notes_sante_txt = "\n".join(f"• {n}" for n in self.notes_sante) or "Données insuffisantes."
         self.notes_div_txt = "\n".join(f"• {n}" for n in self.notes_div) or "Données insuffisantes."
+        self._peupler_tuiles_notes(self.ids.notes_sante_box, self.notes_sante)
+        self._peupler_tuiles_notes(self.ids.notes_div_box, self.notes_div)
 
         # --- Cartes du haut (quantité / prix / PV-MV / scores / verdict) ---
         quantite_detenue = None
