@@ -18,7 +18,7 @@ server.py (voir README).
 import threading
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, date
 
 from kivy.app import App
 from kivy.clock import mainthread, Clock
@@ -67,6 +67,15 @@ def initiales_depuis_nom(nom):
     if len(mots) == 1:
         return mots[0][:2].upper()
     return (mots[0][0] + mots[1][0]).upper()
+
+
+def date_debut_dividendes_mois_precedent():
+    """1er jour du mois précédent le mois en cours (pas de borne
+    supérieure : les versements futurs/prévus restent tous affichés)."""
+    aujourdhui = date.today()
+    annee_debut = aujourdhui.year if aujourdhui.month > 1 else aujourdhui.year - 1
+    mois_debut = aujourdhui.month - 1 if aujourdhui.month > 1 else 12
+    return date(annee_debut, mois_debut, 1)
 
 KV = """
 #:import dp kivy.metrics.dp
@@ -284,15 +293,32 @@ KV = """
         bold: True
         font_size: "12sp"
 
+<DividendMonthHeader@Label>:
+    size_hint_y: None
+    height: dp(40)
+    bold: True
+    font_size: "16sp"
+    color: 0.95, 0.96, 0.97, 1
+    halign: "left"
+    valign: "bottom"
+    text_size: self.size
+    canvas.before:
+        Color:
+            rgba: 0.15, 0.17, 0.21, 1
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
+
 <DividendGroupHeader@Label>:
     size_hint_y: None
-    height: dp(34)
+    height: dp(30)
     bold: True
     font_size: "12sp"
     color: 0.48, 0.51, 0.56, 1
     halign: "left"
     valign: "bottom"
     text_size: self.size
+    padding: dp(8), 0, 0, 0
 
 <DividendRow@BoxLayout>:
     orientation: "horizontal"
@@ -1134,6 +1160,8 @@ class PortfolioScreen(Screen):
             t: PALETTE_AVATARS[i % len(PALETTE_AVATARS)] for i, t in enumerate(tickers_tries)
         }
 
+        date_debut = date_debut_dividendes_mois_precedent()
+
         evenements_par_date = {}
         for ticker, liste in (data or {}).items():
             cle = ticker.upper()
@@ -1146,6 +1174,11 @@ class PortfolioScreen(Screen):
                 montant = e.get("montant")
                 if not date_iso or montant is None:
                     continue
+                try:
+                    if datetime.strptime(date_iso, "%Y-%m-%d").date() < date_debut:
+                        continue  # trop ancien : hors fenêtre (mois précédent -> pas de limite future)
+                except ValueError:
+                    continue
                 evenements_par_date.setdefault(date_iso, []).append({
                     "ticker": cle,
                     "nom": noms.get(cle, cle),
@@ -1156,18 +1189,31 @@ class PortfolioScreen(Screen):
 
         if not evenements_par_date:
             box.add_widget(Label(
-                text="Aucun versement de dividende connu pour l'instant.",
+                text="Aucun versement de dividende sur cette période.",
                 size_hint_y=None, height=80, color=TXT_MUTED,
             ))
             return
 
-        for date_iso in sorted(evenements_par_date.keys()):
-            entete = Factory.DividendGroupHeader()
+        # Regroupement à deux niveaux : mois (ex. "SEPTEMBRE 2026") puis
+        # jour (ex. "18 SEPTEMBRE 2026") à l'intérieur de chaque mois.
+        dates_triees = sorted(evenements_par_date.keys())
+        mois_courant_affiche = None
+
+        for date_iso in dates_triees:
+            annee, mois, _ = date_iso.split("-")
+            cle_mois = (annee, mois)
+            if cle_mois != mois_courant_affiche:
+                mois_courant_affiche = cle_mois
+                entete_mois = Factory.DividendMonthHeader()
+                entete_mois.text = f"{MOIS_FR[int(mois) - 1]} {annee}".upper()
+                box.add_widget(entete_mois)
+
+            entete_jour = Factory.DividendGroupHeader()
             libelle = date_fr_majuscules(date_iso)
             if evenements_par_date[date_iso][0]["prevu"]:
                 libelle += "  (PRÉVU)"
-            entete.text = libelle
-            box.add_widget(entete)
+            entete_jour.text = libelle
+            box.add_widget(entete_jour)
 
             for e in sorted(evenements_par_date[date_iso], key=lambda x: x["nom"]):
                 row = Factory.DividendRow()
