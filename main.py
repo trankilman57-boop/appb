@@ -119,7 +119,7 @@ KV = """
 <PositionRow@BoxLayout>:
     orientation: "horizontal"
     size_hint_y: None
-    height: dp(126)
+    height: dp(140)
     padding: dp(14), dp(12)
     spacing: dp(12)
     canvas.before:
@@ -164,7 +164,7 @@ KV = """
         spacing: dp(6)
 
         BoxLayout:
-            size_hint_y: 0.34
+            size_hint_y: 0.44
             padding: 0, dp(3), 0, 0
             Label:
                 text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
@@ -173,21 +173,21 @@ KV = """
                 font_size: "15sp"
                 color: 0.95, 0.96, 0.97, 1
                 halign: "left"
-                valign: "middle"
+                valign: "top"
                 text_size: self.size
                 shorten: True
             Label:
                 text: root.pv_mv_txt
                 color: root.pv_mv_color
                 bold: True
-                font_size: "15sp"
+                font_size: "13sp"
                 halign: "right"
-                valign: "middle"
+                valign: "top"
                 text_size: self.size
                 size_hint_x: 0.5
 
         BoxLayout:
-            size_hint_y: 0.28
+            size_hint_y: 0.22
             Label:
                 text: (root.quantite_txt + " actions" if root.quantite_txt else "")
                 font_size: "12sp"
@@ -438,8 +438,8 @@ KV = """
 
         BoxLayout:
             size_hint_y: None
-            height: dp(84)
-            padding: dp(20), dp(18), dp(20), dp(14)
+            height: dp(96)
+            padding: dp(20), dp(28), dp(20), dp(14)
             spacing: dp(4)
             orientation: "vertical"
             canvas.before:
@@ -777,7 +777,7 @@ KV = """
                 BoxLayout:
                     orientation: "vertical"
                     size_hint_y: None
-                    height: dp(96)
+                    height: dp(116)
                     padding: dp(14)
                     spacing: dp(4)
                     canvas.before:
@@ -806,7 +806,7 @@ KV = """
                         height: dp(20)
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(40)
+                        height: dp(60)
                         BoxLayout:
                             orientation: "vertical"
                             Label:
@@ -814,13 +814,17 @@ KV = """
                                 font_size: "13sp"
                                 color: 0.42, 0.45, 0.50, 1
                                 halign: "left"
+                                valign: "top"
                                 text_size: self.size
+                                size_hint_y: None
+                                height: dp(18)
                             Label:
                                 text: root.prix_actuel_txt
                                 font_size: "18sp"
                                 bold: True
                                 color: 0.95, 0.96, 0.97, 1
                                 halign: "left"
+                                valign: "top"
                                 text_size: self.size
                         BoxLayout:
                             orientation: "vertical"
@@ -829,13 +833,17 @@ KV = """
                                 font_size: "13sp"
                                 color: 0.42, 0.45, 0.50, 1
                                 halign: "right"
+                                valign: "top"
                                 text_size: self.size
+                                size_hint_y: None
+                                height: dp(18)
                             Label:
                                 text: root.pv_mv_detail_txt
-                                font_size: "18sp"
+                                font_size: "15sp"
                                 bold: True
                                 color: root.pv_mv_detail_color
                                 halign: "right"
+                                valign: "top"
                                 text_size: self.size
 
                 BoxLayout:
@@ -1409,8 +1417,12 @@ class PortfolioScreen(Screen):
                 self._total_valeur += r["valeur_position"]
             signe = "+" if r["pv_mv_eur"] >= 0 else ""
             pct = r.get("pv_mv_pct")
-            pct_txt = f" ({signe}{pct:.1f}%)" if pct is not None else ""
-            row.pv_mv_txt = f"{signe}{r['pv_mv_eur']:.2f}{pct_txt}"
+            pct_txt = f"({signe}{pct:.1f}%)" if pct is not None else ""
+            # Saut de ligne explicite plutôt que de laisser le retour à la
+            # ligne automatique décider : hauteur de tuile prévisible sur
+            # 2 lignes fixes, au lieu d'un wrap qui pouvait déborder sur
+            # la ligne du dessous (montant tronqué).
+            row.pv_mv_txt = f"{signe}{r['pv_mv_eur']:.2f} €" + (f"\n{pct_txt}" if pct_txt else "")
             row.pv_mv_color = couleur_pv(r["pv_mv_eur"])
             row.accent_color = couleur_pv(r["pv_mv_eur"])
         else:
@@ -1784,8 +1796,11 @@ class DetailScreen(Screen):
         if pv is not None:
             signe = "+" if pv >= 0 else ""
             pct = r.get("pv_mv_pct")
-            pct_txt = f" ({signe}{pct:.1f}%)" if pct is not None else ""
-            self.pv_mv_detail_txt = f"{signe}{pv:.2f} €{pct_txt}"
+            pct_txt = f"({signe}{pct:.1f}%)" if pct is not None else ""
+            # Saut de ligne explicite (comme pour les tuiles du portefeuille) :
+            # évite qu'un retour à la ligne automatique ne fasse déborder le
+            # montant hors de la zone visible.
+            self.pv_mv_detail_txt = f"{signe}{pv:.2f} €" + (f"\n{pct_txt}" if pct_txt else "")
             self.pv_mv_detail_color = list(couleur_pv(pv))
         else:
             self.pv_mv_detail_txt = "N/A"
