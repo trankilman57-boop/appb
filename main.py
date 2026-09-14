@@ -315,27 +315,28 @@ KV = """
     nom_mois: ""
     total_mois: ""
 
-    Button:
+    BoxLayout:
+        id: entete
+        orientation: "horizontal"
         size_hint_y: None
         height: dp(40)
-        background_normal: ""
-        background_down: ""
-        background_color: 0, 0, 0, 0
-        on_release: root.replie = not root.replie
+        padding: dp(2), 0
         canvas.before:
             Color:
                 rgba: 0.15, 0.17, 0.21, 1
             Line:
                 points: [self.x, self.y, self.x + self.width, self.y]
                 width: 1
-        IconChevron:
-            pos: self.parent.x + dp(2), self.parent.y
-            size: dp(18), self.parent.height
-            direction: "up" if root.replie else "down"
-            couleur: 0.95, 0.96, 0.97, 1
+        on_touch_down: if self.collide_point(*args[1].pos): root.replie = not root.replie
+        AnchorLayout:
+            size_hint_x: None
+            width: dp(24)
+            IconChevron:
+                size_hint: None, None
+                size: dp(18), dp(18)
+                direction: "down" if root.replie else "up"
+                couleur: 0.95, 0.96, 0.97, 1
         Label:
-            pos: self.parent.x + dp(22), self.parent.y
-            size: self.parent.width * 0.58, self.parent.height
             text: root.nom_mois
             bold: True
             font_size: "16sp"
@@ -344,8 +345,6 @@ KV = """
             valign: "bottom"
             text_size: self.size
         Label:
-            pos: self.parent.right - self.parent.width * 0.38 - dp(2), self.parent.y
-            size: self.parent.width * 0.38, self.parent.height
             text: root.total_mois
             bold: True
             font_size: "14sp"
@@ -353,6 +352,7 @@ KV = """
             halign: "right"
             valign: "bottom"
             text_size: self.size
+            size_hint_x: 0.4
 
     BoxLayout:
         id: contenu
@@ -516,10 +516,13 @@ KV = """
                 text: ""
                 size_hint_x: 0.3
                 on_release: root.manager.current = "settings"
-                IconEngrenage:
-                    center: self.parent.center
-                    size: dp(22), dp(22)
-                    couleur: 0.85, 0.87, 0.90, 1
+                AnchorLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+                    IconEngrenage:
+                        size_hint: None, None
+                        size: dp(22), dp(22)
+                        couleur: 0.85, 0.87, 0.90, 1
                     couleur_fond: 0.18, 0.20, 0.24, 1
 
         BoxLayout:
@@ -719,11 +722,14 @@ KV = """
                 text: ""
                 size_hint_x: 0.15
                 on_release: root.manager.current = "portfolio"
-                IconChevron:
-                    center: self.parent.center
-                    size: dp(20), dp(20)
-                    direction: "left"
-                    couleur: 0.78, 0.80, 0.82, 1
+                AnchorLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+                    IconChevron:
+                        size_hint: None, None
+                        size: dp(20), dp(20)
+                        direction: "left"
+                        couleur: 0.78, 0.80, 0.82, 1
             Label:
                 text: root.nom
                 bold: True
@@ -986,11 +992,14 @@ KV = """
                 text: ""
                 size_hint_x: 0.15
                 on_release: root.manager.current = "detail"
-                IconChevron:
-                    center: self.parent.center
-                    size: dp(20), dp(20)
-                    direction: "left"
-                    couleur: 0.78, 0.80, 0.82, 1
+                AnchorLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+                    IconChevron:
+                        size_hint: None, None
+                        size: dp(20), dp(20)
+                        direction: "left"
+                        couleur: 0.78, 0.80, 0.82, 1
             Label:
                 text: "Actualités — " + root.nom
                 bold: True
@@ -1041,11 +1050,14 @@ KV = """
                 text: ""
                 size_hint_x: 0.15
                 on_release: root.manager.current = "detail"
-                IconChevron:
-                    center: self.parent.center
-                    size: dp(20), dp(20)
-                    direction: "left"
-                    couleur: 0.78, 0.80, 0.82, 1
+                AnchorLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+                    IconChevron:
+                        size_hint: None, None
+                        size: dp(20), dp(20)
+                        direction: "left"
+                        couleur: 0.78, 0.80, 0.82, 1
             Label:
                 text: "Analystes — " + root.nom
                 bold: True
