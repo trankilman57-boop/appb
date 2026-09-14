@@ -94,11 +94,11 @@ KV = """
     font_size: "13sp"
 
 <PositionRow@BoxLayout>:
-    orientation: "vertical"
+    orientation: "horizontal"
     size_hint_y: None
     height: dp(118)
     padding: dp(14), dp(10)
-    spacing: dp(4)
+    spacing: dp(12)
     canvas.before:
         Color:
             rgba: 0.13, 0.145, 0.175, 1
@@ -124,61 +124,76 @@ KV = """
     div_txt: "…"
     verdict: ""
     a_des_alertes: False
+    initiales: "??"
+    couleur_avatar: 0.184, 0.435, 0.929, 1
+
+    AnchorLayout:
+        size_hint_x: None
+        width: dp(40)
+        anchor_y: "top"
+        padding: 0, dp(2), 0, 0
+        AvatarCercle:
+            initiales: root.initiales
+            couleur: root.couleur_avatar
 
     BoxLayout:
-        size_hint_y: 0.35
-        Label:
-            text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
-            markup: True
-            bold: True
-            font_size: "15sp"
-            color: 0.95, 0.96, 0.97, 1
-            halign: "left"
-            valign: "middle"
-            text_size: self.size
-            shorten: True
-        Label:
-            text: root.pv_mv_txt
-            color: root.pv_mv_color
-            bold: True
-            font_size: "15sp"
-            halign: "right"
-            valign: "middle"
-            text_size: self.size
-            size_hint_x: 0.5
+        orientation: "vertical"
+        spacing: dp(4)
 
-    BoxLayout:
-        size_hint_y: 0.30
-        Label:
-            text: (root.quantite_txt + " actions" if root.quantite_txt else "")
-            font_size: "12sp"
-            color: 0.62, 0.65, 0.70, 1
-            halign: "left"
-            text_size: self.size
+        BoxLayout:
+            size_hint_y: 0.35
+            Label:
+                text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
+                markup: True
+                bold: True
+                font_size: "15sp"
+                color: 0.95, 0.96, 0.97, 1
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+                shorten: True
+            Label:
+                text: root.pv_mv_txt
+                color: root.pv_mv_color
+                bold: True
+                font_size: "15sp"
+                halign: "right"
+                valign: "middle"
+                text_size: self.size
+                size_hint_x: 0.5
 
-    BoxLayout:
-        size_hint_y: 0.35
-        spacing: dp(10)
-        Label:
-            text: "[color=9fa3ab]Santé[/color]  [b]" + root.sante_txt + "[/b]/10"
-            markup: True
-            font_size: "12sp"
-            color: 0.85, 0.87, 0.90, 1
-            halign: "left"
-            text_size: self.size
-        Label:
-            text: "[color=9fa3ab]Div[/color]  [b]" + root.div_txt + "[/b]/10"
-            markup: True
-            font_size: "12sp"
-            color: 0.85, 0.87, 0.90, 1
-            halign: "left"
-            text_size: self.size
-        Label:
-            markup: True
-            text: ("[color=4caf50]" if root.verdict.startswith("OK") else "[color=e05555]" if root.verdict.startswith("KO") else "[color=f2a63f]" if root.verdict.startswith("MOYEN") else "[color=9fa3ab]") + (root.verdict.split(" ", 1)[-1] if " " in root.verdict else root.verdict) + "[/color]" + ("  [color=f2a63f][b]![/b][/color]" if root.a_des_alertes else "")
-            font_size: "12sp"
-            halign: "right"
-            text_size: self.size
+        BoxLayout:
+            size_hint_y: 0.30
+            Label:
+                text: (root.quantite_txt + " actions" if root.quantite_txt else "")
+                font_size: "12sp"
+                color: 0.62, 0.65, 0.70, 1
+                halign: "left"
+                text_size: self.size
+
+        BoxLayout:
+            size_hint_y: 0.35
+            spacing: dp(10)
+            Label:
+                text: "[color=9fa3ab]Santé[/color]  [b]" + root.sante_txt + "[/b]/10"
+                markup: True
+                font_size: "12sp"
+                color: 0.85, 0.87, 0.90, 1
+                halign: "left"
+                text_size: self.size
+            Label:
+                text: "[color=9fa3ab]Div[/color]  [b]" + root.div_txt + "[/b]/10"
+                markup: True
+                font_size: "12sp"
+                color: 0.85, 0.87, 0.90, 1
+                halign: "left"
+                text_size: self.size
+            Label:
+                markup: True
+                text: ("[color=4caf50]" if root.verdict.startswith("OK") else "[color=e05555]" if root.verdict.startswith("KO") else "[color=f2a63f]" if root.verdict.startswith("MOYEN") else "[color=9fa3ab]") + (root.verdict.split(" ", 1)[-1] if " " in root.verdict else root.verdict) + "[/color]" + ("  [color=f2a63f][b]![/b][/color]" if root.a_des_alertes else "")
+                font_size: "12sp"
+                halign: "right"
+                text_size: self.size
 
 <NewsRow@BoxLayout>:
     orientation: "vertical"
@@ -343,32 +358,68 @@ KV = """
 
         BoxLayout:
             size_hint_y: None
-            height: dp(72)
-            padding: dp(16), dp(10)
+            height: dp(84)
+            padding: dp(20), dp(18), dp(20), dp(14)
+            spacing: dp(4)
+            orientation: "vertical"
             canvas.before:
                 Color:
                     rgba: 0.10, 0.11, 0.14, 1
                 Rectangle:
                     pos: self.pos
                     size: self.size
+            Label:
+                text: "Valeur du portefeuille"
+                font_size: "13sp"
+                bold: True
+                color: 0.482, 0.51, 0.564, 1
+                halign: "left"
+                text_size: self.size
+                size_hint_y: None
+                height: dp(18)
             BoxLayout:
-                orientation: "vertical"
+                size_hint_y: None
+                height: dp(40)
+                spacing: dp(10)
                 Label:
-                    text: "Suivi Bourse"
+                    text: root.total_valeur_txt
+                    font_size: "28sp"
                     bold: True
-                    font_size: "20sp"
-                    color: 0.95, 0.96, 0.97, 1
+                    color: 0.953, 0.961, 0.969, 1
                     halign: "left"
+                    valign: "middle"
                     text_size: self.size
-                    size_hint_y: 0.55
-                Label:
-                    text: root.total_txt + ("   ·   MàJ " + root.derniere_maj if root.derniere_maj else "")
-                    bold: True
-                    font_size: "14sp"
-                    color: root.total_color
-                    halign: "left"
-                    text_size: self.size
-                    size_hint_y: 0.45
+                AnchorLayout:
+                    size_hint_x: None
+                    width: label_pv.texture_size[0] + dp(20)
+                    anchor_y: "center"
+                    BoxLayout:
+                        size_hint: None, None
+                        size: label_pv.texture_size[0] + dp(20), dp(26)
+                        canvas.before:
+                            Color:
+                                rgba: root.total_badge_bg
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(13)]
+                        Label:
+                            id: label_pv
+                            text: root.total_txt
+                            font_size: "13sp"
+                            bold: True
+                            color: root.total_color
+                            size_hint: None, None
+                            size: self.texture_size
+                            pos_hint: {"center_x": 0.5, "center_y": 0.5}
+            Label:
+                text: ("MàJ " + root.derniere_maj) if root.derniere_maj else ""
+                font_size: "11sp"
+                color: 0.482, 0.51, 0.564, 1
+                halign: "left"
+                text_size: self.size
+                size_hint_y: None
+                height: dp(14)
 
         BoxLayout:
             size_hint_y: None
@@ -880,6 +931,8 @@ def couleur_pv(valeur):
 class PortfolioScreen(Screen):
     total_txt = StringProperty("")
     total_color = ListProperty(list(WHITE))
+    total_valeur_txt = StringProperty("")
+    total_badge_bg = ListProperty([0, 0, 0, 0])
     refreshing = BooleanProperty(False)
     erreur_globale = StringProperty("")
     derniere_maj = StringProperty("")
@@ -916,6 +969,7 @@ class PortfolioScreen(Screen):
         self.ids.liste_box.clear_widgets()
         self._rows = []
         self._total_pv = 0.0
+        self._total_valeur = 0.0
         self._total_connu = False
         self._erreurs = 0
 
@@ -925,6 +979,8 @@ class PortfolioScreen(Screen):
                       size_hint_y=None, height=80, color=TXT_MUTED)
             )
             self.total_txt = ""
+            self.total_valeur_txt = "0.00 €"
+            self.total_badge_bg = [0, 0, 0, 0]
             return
 
         self.refreshing = True
@@ -969,6 +1025,12 @@ class PortfolioScreen(Screen):
         row = self._rows[index]
         row.ticker = r.get("ticker", row.ticker)
         row.nom = r.get("nom") or row.ticker
+        row.initiales = initiales_depuis_nom(row.nom)
+        # Somme des codes caractères plutôt que hash() : hash() est
+        # randomisé par process en Python (PYTHONHASHSEED), la couleur
+        # changerait à chaque redémarrage de l'app sinon.
+        indice_couleur = sum(ord(c) for c in row.ticker) % len(PALETTE_AVATARS)
+        row.couleur_avatar = PALETTE_AVATARS[indice_couleur]
         if self._noms_par_ticker is not None:
             self._noms_par_ticker[row.ticker.upper()] = row.nom
 
@@ -986,6 +1048,8 @@ class PortfolioScreen(Screen):
         elif r.get("pv_mv_eur") is not None:
             self._total_pv += r["pv_mv_eur"]
             self._total_connu = True
+            if r.get("valeur_position") is not None:
+                self._total_valeur += r["valeur_position"]
             signe = "+" if r["pv_mv_eur"] >= 0 else ""
             pct = r.get("pv_mv_pct")
             pct_txt = f" ({signe}{pct:.1f}%)" if pct is not None else ""
@@ -1003,9 +1067,19 @@ class PortfolioScreen(Screen):
         row.bind(on_touch_up=lambda inst, touch, res=r:
                   self._ouvrir_detail(res) if inst.collide_point(*touch.pos) else None)
 
-        self.total_txt = (f"PV/MV totale: {'+' if self._total_pv >= 0 else ''}{self._total_pv:.2f} €"
+        signe_total = "+" if self._total_pv >= 0 else ""
+        pct_total = (self._total_pv / (self._total_valeur - self._total_pv) * 100
+                     if self._total_connu and (self._total_valeur - self._total_pv) else None)
+        pct_total_txt = f" ({signe_total}{pct_total:.1f}%)" if pct_total is not None else ""
+        self.total_txt = (f"{signe_total}{self._total_pv:.2f} €{pct_total_txt}"
                            if self._total_connu else "")
         self.total_color = list(couleur_pv(self._total_pv if self._total_connu else None))
+        self.total_valeur_txt = f"{self._total_valeur:.2f} €" if self._total_connu else "…"
+        if self._total_connu:
+            self.total_badge_bg = ([0.322, 0.780, 0.478, 0.14] if self._total_pv >= 0
+                                    else [0.918, 0.380, 0.380, 0.14])
+        else:
+            self.total_badge_bg = [0, 0, 0, 0]
 
     @mainthread
     def _finaliser(self):
