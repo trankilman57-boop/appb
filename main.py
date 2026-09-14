@@ -17,6 +17,7 @@ server.py (voir README).
 
 import threading
 import webbrowser
+import math
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
 
@@ -27,8 +28,9 @@ from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.label import Label
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.widget import Widget
+from kivy.graphics import Color as GraphicsColor, Ellipse, Rectangle, Line, PushMatrix, PopMatrix, Rotate
+from kivy.metrics import dp as dp_py
 from kivy.factory import Factory
 
 import storage
@@ -313,11 +315,11 @@ KV = """
     nom_mois: ""
     total_mois: ""
 
-    BoutonBoxLayout:
-        orientation: "horizontal"
+    Button:
         size_hint_y: None
         height: dp(40)
-        padding: 0, dp(4)
+        background_normal: ""
+        background_down: ""
         background_color: 0, 0, 0, 0
         on_release: root.replie = not root.replie
         canvas.before:
@@ -326,8 +328,15 @@ KV = """
             Line:
                 points: [self.x, self.y, self.x + self.width, self.y]
                 width: 1
+        IconChevron:
+            pos: self.parent.x + dp(2), self.parent.y
+            size: dp(18), self.parent.height
+            direction: "up" if root.replie else "down"
+            couleur: 0.95, 0.96, 0.97, 1
         Label:
-            text: ("▸  " if root.replie else "▾  ") + root.nom_mois
+            pos: self.parent.x + dp(22), self.parent.y
+            size: self.parent.width * 0.58, self.parent.height
+            text: root.nom_mois
             bold: True
             font_size: "16sp"
             color: 0.95, 0.96, 0.97, 1
@@ -335,6 +344,8 @@ KV = """
             valign: "bottom"
             text_size: self.size
         Label:
+            pos: self.parent.right - self.parent.width * 0.38 - dp(2), self.parent.y
+            size: self.parent.width * 0.38, self.parent.height
             text: root.total_mois
             bold: True
             font_size: "14sp"
@@ -342,7 +353,6 @@ KV = """
             halign: "right"
             valign: "bottom"
             text_size: self.size
-            size_hint_x: 0.4
 
     BoxLayout:
         id: contenu
@@ -503,9 +513,14 @@ KV = """
                 disabled: root.refreshing
                 on_release: root.rafraichir()
             GhostButton:
-                text: "Param."
+                text: ""
                 size_hint_x: 0.3
                 on_release: root.manager.current = "settings"
+                IconEngrenage:
+                    center: self.parent.center
+                    size: dp(22), dp(22)
+                    couleur: 0.85, 0.87, 0.90, 1
+                    couleur_fond: 0.18, 0.20, 0.24, 1
 
         BoxLayout:
             size_hint_y: None
@@ -691,7 +706,7 @@ KV = """
 
         BoxLayout:
             size_hint_y: None
-            height: dp(64)
+            height: dp(56)
             padding: dp(12), dp(10)
             spacing: dp(8)
             canvas.before:
@@ -701,41 +716,172 @@ KV = """
                     pos: self.pos
                     size: self.size
             GhostButton:
-                text: "<"
+                text: ""
                 size_hint_x: 0.15
                 on_release: root.manager.current = "portfolio"
+                IconChevron:
+                    center: self.parent.center
+                    size: dp(20), dp(20)
+                    direction: "left"
+                    couleur: 0.78, 0.80, 0.82, 1
             Label:
                 text: root.nom
                 bold: True
                 font_size: "17sp"
                 color: 0.95, 0.96, 0.97, 1
                 halign: "left"
+                valign: "middle"
                 text_size: self.size
-            PillButton:
-                text: "Actus"
-                size_hint_x: 0.25
-                on_release: root.ouvrir_actualites()
-            GhostButton:
-                text: "Analystes"
-                size_hint_x: 0.3
-                on_release: root.ouvrir_analystes()
+                shorten: True
 
         ScrollView:
             BoxLayout:
                 orientation: "vertical"
                 size_hint_y: None
                 height: self.minimum_height
-                padding: dp(16)
-                spacing: dp(10)
+                padding: dp(18)
+                spacing: dp(16)
 
-                Label:
-                    text: root.resume_txt
-                    markup: True
+                BoxLayout:
+                    orientation: "vertical"
                     size_hint_y: None
-                    height: self.texture_size[1]
-                    text_size: self.width, None
-                    halign: "left"
-                    color: 0.90, 0.92, 0.94, 1
+                    height: dp(96)
+                    padding: dp(14)
+                    spacing: dp(4)
+                    canvas.before:
+                        Color:
+                            rgba: 0.11, 0.125, 0.16, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(14)]
+                    Label:
+                        text: "Quantité détenue"
+                        font_size: "13sp"
+                        color: 0.42, 0.45, 0.50, 1
+                        halign: "left"
+                        text_size: self.size
+                        size_hint_y: None
+                        height: dp(18)
+                    Label:
+                        text: root.quantite_detail_txt
+                        font_size: "15sp"
+                        bold: True
+                        color: 0.95, 0.96, 0.97, 1
+                        halign: "left"
+                        text_size: self.size
+                        size_hint_y: None
+                        height: dp(20)
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(40)
+                        BoxLayout:
+                            orientation: "vertical"
+                            Label:
+                                text: "Prix actuel"
+                                font_size: "13sp"
+                                color: 0.42, 0.45, 0.50, 1
+                                halign: "left"
+                                text_size: self.size
+                            Label:
+                                text: root.prix_actuel_txt
+                                font_size: "18sp"
+                                bold: True
+                                color: 0.95, 0.96, 0.97, 1
+                                halign: "left"
+                                text_size: self.size
+                        BoxLayout:
+                            orientation: "vertical"
+                            Label:
+                                text: "PV / MV"
+                                font_size: "13sp"
+                                color: 0.42, 0.45, 0.50, 1
+                                halign: "right"
+                                text_size: self.size
+                            Label:
+                                text: root.pv_mv_detail_txt
+                                font_size: "18sp"
+                                bold: True
+                                color: root.pv_mv_detail_color
+                                halign: "right"
+                                text_size: self.size
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(78)
+                    spacing: dp(12)
+                    BoxLayout:
+                        orientation: "vertical"
+                        padding: dp(12)
+                        canvas.before:
+                            Color:
+                                rgba: 0.11, 0.125, 0.16, 1
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(14)]
+                        Label:
+                            text: "Santé financière"
+                            font_size: "12sp"
+                            color: 0.42, 0.45, 0.50, 1
+                            halign: "center"
+                            text_size: self.size
+                            size_hint_y: 0.4
+                        Label:
+                            markup: True
+                            text: "[b]" + root.note_sante_txt + "[/b]  [size=13sp][color=7b8290]/10[/color][/size]"
+                            font_size: "26sp"
+                            color: 0.95, 0.96, 0.97, 1
+                            halign: "center"
+                            valign: "middle"
+                            text_size: self.size
+                            size_hint_y: 0.6
+                    BoxLayout:
+                        orientation: "vertical"
+                        padding: dp(12)
+                        canvas.before:
+                            Color:
+                                rgba: 0.11, 0.125, 0.16, 1
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(14)]
+                        Label:
+                            text: "Fiabilité dividende"
+                            font_size: "12sp"
+                            color: 0.42, 0.45, 0.50, 1
+                            halign: "center"
+                            text_size: self.size
+                            size_hint_y: 0.4
+                        Label:
+                            markup: True
+                            text: "[b]" + root.note_div_txt + "[/b]  [size=13sp][color=7b8290]/10[/color][/size]"
+                            font_size: "26sp"
+                            color: 0.95, 0.96, 0.97, 1
+                            halign: "center"
+                            valign: "middle"
+                            text_size: self.size
+                            size_hint_y: 0.6
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(44) if root.verdict_txt else 0
+                    padding: dp(14), dp(10)
+                    canvas.before:
+                        Color:
+                            rgba: root.verdict_bg
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(12)]
+                    Label:
+                        text: root.verdict_txt
+                        bold: True
+                        font_size: "13sp"
+                        color: root.verdict_color
+                        halign: "left"
+                        valign: "middle"
+                        text_size: self.size
 
                 Label:
                     text: root.alertes_txt
@@ -744,6 +890,32 @@ KV = """
                     height: self.texture_size[1] if root.alertes_txt else 0
                     text_size: self.width, None
                     halign: "left"
+
+                SectionLabel:
+                    text: "POINTS CLÉS — SANTÉ FINANCIÈRE"
+                    height: dp(26) if root.notes_sante else 0
+
+                Label:
+                    text: root.notes_sante_txt
+                    size_hint_y: None
+                    height: self.texture_size[1]
+                    text_size: self.width, None
+                    halign: "left"
+                    color: 0.78, 0.80, 0.82, 1
+                    font_size: "13sp"
+
+                SectionLabel:
+                    text: "POINTS CLÉS — FIABILITÉ DIVIDENDE"
+                    height: dp(26) if root.notes_div else 0
+
+                Label:
+                    text: root.notes_div_txt
+                    size_hint_y: None
+                    height: self.texture_size[1]
+                    text_size: self.width, None
+                    halign: "left"
+                    color: 0.78, 0.80, 0.82, 1
+                    font_size: "13sp"
 
                 SectionLabel:
                     text: "ANALYSE TECHNIQUE"
@@ -758,38 +930,35 @@ KV = """
                     halign: "left"
                     color: 0.80, 0.83, 0.86, 1
 
-                SectionLabel:
-                    text: "POINTS CLÉS — SANTÉ FINANCIÈRE"
-                    height: dp(26) if root.notes_sante else 0
-
                 Label:
-                    text: root.notes_sante_txt
+                    text: root.resume_txt
+                    markup: True
                     size_hint_y: None
                     height: self.texture_size[1]
                     text_size: self.width, None
                     halign: "left"
-                    color: 0.80, 0.83, 0.86, 1
-
-                SectionLabel:
-                    text: "POINTS CLÉS — FIABILITÉ DIVIDENDE"
-                    height: dp(26) if root.notes_div else 0
-
-                Label:
-                    text: root.notes_div_txt
-                    size_hint_y: None
-                    height: self.texture_size[1]
-                    text_size: self.width, None
-                    halign: "left"
-                    color: 0.80, 0.83, 0.86, 1
+                    color: 0.55, 0.58, 0.62, 1
+                    font_size: "12sp"
 
                 BoxLayout:
                     size_hint_y: None
-                    height: dp(50)
-                    padding: 0, dp(10), 0, 0
+                    height: dp(46)
+                    spacing: dp(10)
+                    padding: 0, dp(4), 0, 0
+                    PillButton:
+                        text: "Actus"
+                        on_release: root.ouvrir_actualites()
                     GhostButton:
-                        text: "Supprimer la position"
-                        color: 0.92, 0.38, 0.38, 1
-                        on_release: root.supprimer()
+                        text: "Analystes"
+                        on_release: root.ouvrir_analystes()
+
+                GhostButton:
+                    text: "Supprimer la position"
+                    color: 0.92, 0.38, 0.38, 1
+                    background_color: 0, 0, 0, 0
+                    size_hint_y: None
+                    height: dp(44)
+                    on_release: root.supprimer()
 
 <NewsScreen>:
     name: "news"
@@ -814,9 +983,14 @@ KV = """
                     pos: self.pos
                     size: self.size
             GhostButton:
-                text: "<"
+                text: ""
                 size_hint_x: 0.15
                 on_release: root.manager.current = "detail"
+                IconChevron:
+                    center: self.parent.center
+                    size: dp(20), dp(20)
+                    direction: "left"
+                    couleur: 0.78, 0.80, 0.82, 1
             Label:
                 text: "Actualités — " + root.nom
                 bold: True
@@ -864,9 +1038,14 @@ KV = """
                     pos: self.pos
                     size: self.size
             GhostButton:
-                text: "<"
+                text: ""
                 size_hint_x: 0.15
                 on_release: root.manager.current = "detail"
+                IconChevron:
+                    center: self.parent.center
+                    size: dp(20), dp(20)
+                    direction: "left"
+                    couleur: 0.78, 0.80, 0.82, 1
             Label:
                 text: "Analystes — " + root.nom
                 bold: True
@@ -987,14 +1166,78 @@ KV = """
 """
 
 
-class BoutonBoxLayout(ButtonBehavior, BoxLayout):
-    """BoxLayout cliquable (on_release) — utilisé pour l'en-tête de mois
-    repliable de l'onglet Dividendes. Kivy n'a pas d'équivalent tout fait
-    combinant layout + comportement bouton, d'où cette petite classe."""
-    pass
+
+class IconEngrenage(Widget):
+    """Roue crantée dessinée en vectoriel (Color/Ellipse/Rectangle), pas un
+    caractère de police — les caractères comme ⚙ ne sont pas dans la
+    police embarquée par Buildozer sur Android et s'affichent en carré
+    vide (même souci que les emoji ailleurs dans l'app)."""
+    couleur = ListProperty([0.85, 0.87, 0.90, 1])
+    couleur_fond = ListProperty([0.18, 0.20, 0.24, 1])  # couleur du bouton, pour "percer" le centre
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(pos=self._redessiner, size=self._redessiner,
+                  couleur=self._redessiner, couleur_fond=self._redessiner)
+
+    def _redessiner(self, *args):
+        self.canvas.clear()
+        if self.width <= 0 or self.height <= 0:
+            return
+        cx, cy = self.center_x, self.center_y
+        rayon_ext = min(self.width, self.height) * 0.46
+        rayon_corps = rayon_ext * 0.62
+        rayon_trou = rayon_ext * 0.30
+        largeur_dent = rayon_ext * 0.34
+        nb_dents = 8
+        with self.canvas:
+            GraphicsColor(*self.couleur)
+            Ellipse(pos=(cx - rayon_corps, cy - rayon_corps), size=(rayon_corps * 2, rayon_corps * 2))
+            for i in range(nb_dents):
+                angle_deg = 360.0 * i / nb_dents
+                PushMatrix()
+                Rotate(angle=angle_deg, origin=(cx, cy))
+                Rectangle(pos=(cx - largeur_dent / 2, cy + rayon_corps * 0.55),
+                          size=(largeur_dent, rayon_ext - rayon_corps * 0.55))
+                PopMatrix()
+            GraphicsColor(*self.couleur_fond)
+            Ellipse(pos=(cx - rayon_trou, cy - rayon_trou), size=(rayon_trou * 2, rayon_trou * 2))
 
 
-Factory.register("BoutonBoxLayout", cls=BoutonBoxLayout)
+Factory.register("IconEngrenage", cls=IconEngrenage)
+
+
+class IconChevron(Widget):
+    """Chevron simple (angle ouvert, sans tige) dessiné en vectoriel.
+    direction: 'left' (retour), 'right', 'up', 'down' (accordéons)."""
+    couleur = ListProperty([0.78, 0.80, 0.82, 1])
+    direction = StringProperty("left")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(pos=self._redessiner, size=self._redessiner,
+                  couleur=self._redessiner, direction=self._redessiner)
+
+    def _redessiner(self, *args):
+        self.canvas.clear()
+        if self.width <= 0 or self.height <= 0:
+            return
+        cx, cy = self.center_x, self.center_y
+        t = min(self.width, self.height) * 0.30
+        if self.direction == "left":
+            points = [cx + t * 0.5, cy + t, cx - t * 0.5, cy, cx + t * 0.5, cy - t]
+        elif self.direction == "right":
+            points = [cx - t * 0.5, cy + t, cx + t * 0.5, cy, cx - t * 0.5, cy - t]
+        elif self.direction == "down":
+            points = [cx - t, cy + t * 0.5, cx, cy - t * 0.5, cx + t, cy + t * 0.5]
+        else:  # up
+            points = [cx - t, cy - t * 0.5, cx, cy + t * 0.5, cx + t, cy - t * 0.5]
+        with self.canvas:
+            GraphicsColor(*self.couleur)
+            Line(points=points, width=dp_py(1.6), cap="round", joint="round")
+
+
+Factory.register("IconChevron", cls=IconChevron)
 
 
 def couleur_pv(valeur):
@@ -1420,6 +1663,15 @@ class DetailScreen(Screen):
     technique_txt = StringProperty("")
     analystes_txt = StringProperty("")
     alertes_txt = StringProperty("")
+    quantite_detail_txt = StringProperty("")
+    prix_actuel_txt = StringProperty("")
+    pv_mv_detail_txt = StringProperty("")
+    pv_mv_detail_color = ListProperty(list(TXT_MUTED))
+    note_sante_txt = StringProperty("N/A")
+    note_div_txt = StringProperty("N/A")
+    verdict_txt = StringProperty("")
+    verdict_color = ListProperty(list(TXT_MUTED))
+    verdict_bg = ListProperty([0, 0, 0, 0])
     _resultat = None
 
     def charger(self, resultat):
@@ -1471,6 +1723,47 @@ class DetailScreen(Screen):
         self.notes_div = r.get("notes_div", [])
         self.notes_sante_txt = "\n".join(f"• {n}" for n in self.notes_sante) or "Données insuffisantes."
         self.notes_div_txt = "\n".join(f"• {n}" for n in self.notes_div) or "Données insuffisantes."
+
+        # --- Cartes du haut (quantité / prix / PV-MV / scores / verdict) ---
+        quantite_detenue = None
+        for p in storage.charger_positions():
+            if p["ticker"].upper() == r.get("ticker", "").upper():
+                quantite_detenue = p.get("quantite")
+                break
+        self.quantite_detail_txt = f"{quantite_detenue:g} actions" if quantite_detenue is not None else "—"
+
+        prix = r.get("prix_actuel")
+        devise = r.get("devise") or ""
+        self.prix_actuel_txt = f"{prix:.2f} {devise}".strip() if prix is not None else "N/A"
+
+        pv = r.get("pv_mv_eur")
+        if pv is not None:
+            signe = "+" if pv >= 0 else ""
+            pct = r.get("pv_mv_pct")
+            pct_txt = f" ({signe}{pct:.1f}%)" if pct is not None else ""
+            self.pv_mv_detail_txt = f"{signe}{pv:.2f} €{pct_txt}"
+            self.pv_mv_detail_color = list(couleur_pv(pv))
+        else:
+            self.pv_mv_detail_txt = "N/A"
+            self.pv_mv_detail_color = list(TXT_MUTED)
+
+        self.note_sante_txt = f"{r['note_sante']}" if r.get("note_sante") is not None else "N/A"
+        self.note_div_txt = f"{r['note_div']}" if r.get("note_div") is not None else "N/A"
+
+        verdict = r.get("verdict", "")
+        self.verdict_txt = verdict.split(" ", 1)[-1] if " " in verdict else verdict
+        if verdict.startswith("OK"):
+            self.verdict_color = [0.322, 0.780, 0.478, 1]
+            self.verdict_bg = [0.322, 0.780, 0.478, 0.12]
+        elif verdict.startswith("KO"):
+            self.verdict_color = [0.918, 0.380, 0.380, 1]
+            self.verdict_bg = [0.918, 0.380, 0.380, 0.12]
+        elif verdict.startswith("MOYEN"):
+            self.verdict_color = [0.949, 0.651, 0.247, 1]
+            self.verdict_bg = [0.949, 0.651, 0.247, 0.12]
+        else:
+            self.verdict_color = list(TXT_MUTED)
+            self.verdict_bg = [0.482, 0.51, 0.564, 0.12]
 
         # --- Analyse technique (SMA50/SMA200, volume) ---
         lignes_tech = []
