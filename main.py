@@ -27,6 +27,8 @@ from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.label import Label
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.factory import Factory
 
 import storage
@@ -293,21 +295,52 @@ KV = """
         bold: True
         font_size: "12sp"
 
-<DividendMonthHeader@Label>:
+<DividendMonthGroup@BoxLayout>:
+    orientation: "vertical"
     size_hint_y: None
-    height: dp(40)
-    bold: True
-    font_size: "16sp"
-    color: 0.95, 0.96, 0.97, 1
-    halign: "left"
-    valign: "bottom"
-    text_size: self.size
-    canvas.before:
-        Color:
-            rgba: 0.15, 0.17, 0.21, 1
-        Line:
-            points: [self.x, self.y, self.x + self.width, self.y]
-            width: 1
+    height: self.minimum_height
+    replie: False
+    nom_mois: ""
+    total_mois: ""
+
+    BoutonBoxLayout:
+        orientation: "horizontal"
+        size_hint_y: None
+        height: dp(40)
+        padding: 0, dp(4)
+        background_color: 0, 0, 0, 0
+        on_release: root.replie = not root.replie
+        canvas.before:
+            Color:
+                rgba: 0.15, 0.17, 0.21, 1
+            Line:
+                points: [self.x, self.y, self.x + self.width, self.y]
+                width: 1
+        Label:
+            text: ("▸  " if root.replie else "▾  ") + root.nom_mois
+            bold: True
+            font_size: "16sp"
+            color: 0.95, 0.96, 0.97, 1
+            halign: "left"
+            valign: "bottom"
+            text_size: self.size
+        Label:
+            text: root.total_mois
+            bold: True
+            font_size: "14sp"
+            color: 0.322, 0.780, 0.478, 1
+            halign: "right"
+            valign: "bottom"
+            text_size: self.size
+            size_hint_x: 0.4
+
+    BoxLayout:
+        id: contenu
+        orientation: "vertical"
+        size_hint_y: None
+        height: 0 if root.replie else self.minimum_height
+        opacity: 0 if root.replie else 1
+        disabled: root.replie
 
 <DividendGroupHeader@Label>:
     size_hint_y: None
@@ -944,6 +977,16 @@ KV = """
 """
 
 
+class BoutonBoxLayout(ButtonBehavior, BoxLayout):
+    """BoxLayout cliquable (on_release) — utilisé pour l'en-tête de mois
+    repliable de l'onglet Dividendes. Kivy n'a pas d'équivalent tout fait
+    combinant layout + comportement bouton, d'où cette petite classe."""
+    pass
+
+
+Factory.register("BoutonBoxLayout", cls=BoutonBoxLayout)
+
+
 def couleur_pv(valeur):
     if valeur is None:
         return TXT_MUTED
@@ -967,6 +1010,7 @@ class PortfolioScreen(Screen):
     INTERVALLE_AUTO_REFRESH = 300  # secondes (5 minutes)
     _auto_refresh_event = None
     _dividendes_charges = False
+    _mois_replies = None  # set de (année, mois) repliés, initialisé au premier accès
     _noms_par_ticker = None  # dict ticker -> nom, peuplé au fil des rafraîchissements
 
     def on_pre_enter(self):
@@ -1148,6 +1192,8 @@ class PortfolioScreen(Screen):
     @mainthread
     def _afficher_dividendes(self, data, positions):
         self._dividendes_charges = True
+        if self._mois_replies is None:
+            self._mois_replies = set()
         box = self.ids.dividendes_box
         box.clear_widgets()
 
@@ -1197,23 +1243,41 @@ class PortfolioScreen(Screen):
         # Regroupement à deux niveaux : mois (ex. "SEPTEMBRE 2026") puis
         # jour (ex. "18 SEPTEMBRE 2026") à l'intérieur de chaque mois.
         dates_triees = sorted(evenements_par_date.keys())
+
+        # Pré-calcul du total perçu par mois (montant × quantité, tous
+        # tickers confondus), affiché à côté du libellé du mois.
+        total_par_mois = {}
+        for date_iso in dates_triees:
+            annee, mois, _ = date_iso.split("-")
+            cle_mois = (annee, mois)
+            for e in evenements_par_date[date_iso]:
+                total_par_mois[cle_mois] = total_par_mois.get(cle_mois, 0.0) + e["montant"] * e["quantite"]
+
         mois_courant_affiche = None
+        groupe_mois = None
 
         for date_iso in dates_triees:
             annee, mois, _ = date_iso.split("-")
             cle_mois = (annee, mois)
             if cle_mois != mois_courant_affiche:
                 mois_courant_affiche = cle_mois
-                entete_mois = Factory.DividendMonthHeader()
-                entete_mois.text = f"{MOIS_FR[int(mois) - 1]} {annee}".upper()
-                box.add_widget(entete_mois)
+                groupe_mois = Factory.DividendMonthGroup()
+                groupe_mois.nom_mois = f"{MOIS_FR[int(mois) - 1]} {annee}".upper()
+                groupe_mois.total_mois = f"+{total_par_mois[cle_mois]:.2f} €"
+                # On mémorise l'état replié/déplié d'un rafraîchissement à
+                # l'autre (sinon rouvrir l'onglet ou rafraîchir replierait
+                # tout à chaque fois).
+                groupe_mois.replie = cle_mois in self._mois_replies
+                groupe_mois.bind(replie=self._on_mois_replie_change)
+                groupe_mois._cle_mois = cle_mois
+                box.add_widget(groupe_mois)
 
             entete_jour = Factory.DividendGroupHeader()
             libelle = date_fr_majuscules(date_iso)
             if evenements_par_date[date_iso][0]["prevu"]:
                 libelle += "  (PRÉVU)"
             entete_jour.text = libelle
-            box.add_widget(entete_jour)
+            groupe_mois.ids.contenu.add_widget(entete_jour)
 
             for e in sorted(evenements_par_date[date_iso], key=lambda x: x["nom"]):
                 row = Factory.DividendRow()
@@ -1226,7 +1290,16 @@ class PortfolioScreen(Screen):
                 row.qty_txt = f"{qte_txt} actions"
                 total = e["montant"] * qte
                 row.total_txt = f"+{total:.2f} €"
-                box.add_widget(row)
+                groupe_mois.ids.contenu.add_widget(row)
+
+    def _on_mois_replie_change(self, instance, valeur):
+        cle_mois = getattr(instance, "_cle_mois", None)
+        if cle_mois is None:
+            return
+        if valeur:
+            self._mois_replies.add(cle_mois)
+        else:
+            self._mois_replies.discard(cle_mois)
 
     def _ouvrir_detail(self, resultat):
         detail = self.manager.get_screen("detail")
