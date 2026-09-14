@@ -66,6 +66,21 @@ def obtenir_actualites(server_url, ticker, limit=6):
         return []
 
 
+def obtenir_dividendes(server_url, tickers):
+    """Appelle GET {server_url}/dividendes?tickers=AAPL,MC.PA,...
+    Retourne un dict {ticker: [{"date","montant","prevu"}, ...]}, ou un
+    dict vide en cas d'erreur. `tickers` est une liste de tickers Yahoo."""
+    if not tickers:
+        return {}
+    url = server_url.rstrip("/") + "/dividendes"
+    try:
+        resp = requests.get(url, params={"tickers": ",".join(tickers)}, timeout=TIMEOUT_SECONDES)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {}
+
+
 def obtenir_portefeuille_t212(server_url):
     """Appelle GET {server_url}/t212/portefeuille.
     Retourne (positions, erreur) où positions est une liste de dicts

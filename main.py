@@ -39,6 +39,34 @@ GREEN = (0.32, 0.78, 0.48, 1)
 RED = (0.92, 0.38, 0.38, 1)
 ORANGE = (0.95, 0.65, 0.25, 1)
 WHITE = (0.95, 0.96, 0.97, 1)
+BLEU_ACCENT = (0.184, 0.435, 0.929, 1)  # #2f6fed — tokens du design
+PALETTE_AVATARS = [
+    (0.184, 0.435, 0.929, 1),  # #2f6fed
+    (0.949, 0.651, 0.247, 1),  # #f2a63f
+    (0.322, 0.780, 0.478, 1),  # #52c77a
+    (0.541, 0.361, 0.976, 1),  # #8a5cf6
+]
+MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+           "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def date_fr_majuscules(date_iso):
+    """'2026-09-18' -> '18 SEPTEMBRE 2026' (sans dépendre de la locale
+    système, peu fiable sous Android/Buildozer)."""
+    try:
+        y, m, d = date_iso.split("-")
+        return f"{int(d)} {MOIS_FR[int(m) - 1]} {y}".upper()
+    except Exception:
+        return date_iso
+
+
+def initiales_depuis_nom(nom):
+    mots = [w for w in nom.replace("-", " ").split(" ") if w]
+    if not mots:
+        return "??"
+    if len(mots) == 1:
+        return mots[0][:2].upper()
+    return (mots[0][0] + mots[1][0]).upper()
 
 KV = """
 #:import dp kivy.metrics.dp
@@ -224,6 +252,84 @@ KV = """
             halign: "left"
             text_size: self.size
 
+<AvatarCercle@BoxLayout>:
+    size_hint: None, None
+    size: dp(40), dp(40)
+    couleur: 0.184, 0.435, 0.929, 1
+    initiales: "??"
+    canvas.before:
+        Color:
+            rgba: root.couleur
+        Ellipse:
+            pos: self.pos
+            size: self.size
+    Label:
+        text: root.initiales
+        color: 0.11, 0.13, 0.16, 1
+        bold: True
+        font_size: "12sp"
+
+<DividendGroupHeader@Label>:
+    size_hint_y: None
+    height: dp(34)
+    bold: True
+    font_size: "12sp"
+    color: 0.48, 0.51, 0.56, 1
+    halign: "left"
+    valign: "bottom"
+    text_size: self.size
+
+<DividendRow@BoxLayout>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: dp(60)
+    padding: dp(4), dp(8)
+    spacing: dp(12)
+    nom: ""
+    initiales: "??"
+    couleur_avatar: 0.184, 0.435, 0.929, 1
+    per_share_txt: ""
+    qty_txt: ""
+    total_txt: ""
+    canvas.before:
+        Color:
+            rgba: 0.15, 0.17, 0.21, 1
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
+    AvatarCercle:
+        initiales: root.initiales
+        couleur: root.couleur_avatar
+    BoxLayout:
+        orientation: "vertical"
+        Label:
+            text: root.nom
+            bold: True
+            font_size: "14sp"
+            color: 0.95, 0.96, 0.97, 1
+            halign: "left"
+            valign: "bottom"
+            text_size: self.size
+            shorten: True
+            size_hint_y: 0.55
+        Label:
+            text: root.per_share_txt + " / action  ·  " + root.qty_txt
+            font_size: "11sp"
+            color: 0.48, 0.51, 0.56, 1
+            halign: "left"
+            valign: "top"
+            text_size: self.size
+            size_hint_y: 0.45
+    Label:
+        text: root.total_txt
+        bold: True
+        font_size: "15sp"
+        color: 0.322, 0.780, 0.478, 1
+        halign: "right"
+        valign: "middle"
+        text_size: self.size
+        size_hint_x: 0.34
+
 <PortfolioScreen>:
     name: "portfolio"
     canvas.before:
@@ -281,6 +387,47 @@ KV = """
                 size_hint_x: 0.3
                 on_release: root.manager.current = "settings"
 
+        BoxLayout:
+            size_hint_y: None
+            height: dp(40)
+            padding: dp(20), 0, dp(20), 0
+            canvas.before:
+                Color:
+                    rgba: 0.15, 0.17, 0.21, 1
+                Line:
+                    points: [self.x, self.y, self.x + self.width, self.y]
+                    width: 1
+            Button:
+                text: "Portefeuille"
+                background_color: 0, 0, 0, 0
+                background_normal: ""
+                background_down: ""
+                color: (0.95, 0.96, 0.97, 1) if root.tab_actif == "portefeuille" else (0.48, 0.51, 0.56, 1)
+                bold: True
+                font_size: "14sp"
+                on_release: root.changer_tab("portefeuille")
+                canvas.after:
+                    Color:
+                        rgba: (0.184, 0.435, 0.929, 1) if root.tab_actif == "portefeuille" else (0, 0, 0, 0)
+                    Rectangle:
+                        pos: self.x, self.y
+                        size: self.width, dp(2)
+            Button:
+                text: "Dividendes"
+                background_color: 0, 0, 0, 0
+                background_normal: ""
+                background_down: ""
+                color: (0.95, 0.96, 0.97, 1) if root.tab_actif == "dividendes" else (0.48, 0.51, 0.56, 1)
+                bold: True
+                font_size: "14sp"
+                on_release: root.changer_tab("dividendes")
+                canvas.after:
+                    Color:
+                        rgba: (0.184, 0.435, 0.929, 1) if root.tab_actif == "dividendes" else (0, 0, 0, 0)
+                    Rectangle:
+                        pos: self.x, self.y
+                        size: self.width, dp(2)
+
         Label:
             text: root.erreur_globale
             color: 0.95, 0.65, 0.25, 1
@@ -289,6 +436,10 @@ KV = """
             font_size: "12sp"
 
         ScrollView:
+            size_hint_y: None if root.tab_actif != "portefeuille" else 1
+            height: 0 if root.tab_actif != "portefeuille" else dp(1)
+            opacity: 1 if root.tab_actif == "portefeuille" else 0
+            disabled: root.tab_actif != "portefeuille"
             BoxLayout:
                 id: liste_box
                 orientation: "vertical"
@@ -296,6 +447,19 @@ KV = """
                 height: self.minimum_height
                 padding: dp(10), dp(4)
                 spacing: dp(8)
+
+        ScrollView:
+            size_hint_y: None if root.tab_actif != "dividendes" else 1
+            height: 0 if root.tab_actif != "dividendes" else dp(1)
+            opacity: 1 if root.tab_actif == "dividendes" else 0
+            disabled: root.tab_actif != "dividendes"
+            BoxLayout:
+                id: dividendes_box
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(10), dp(4)
+                spacing: dp(2)
 
 <AddPositionScreen>:
     name: "add"
@@ -719,11 +883,16 @@ class PortfolioScreen(Screen):
     refreshing = BooleanProperty(False)
     erreur_globale = StringProperty("")
     derniere_maj = StringProperty("")
+    tab_actif = StringProperty("portefeuille")
 
     INTERVALLE_AUTO_REFRESH = 300  # secondes (5 minutes)
     _auto_refresh_event = None
+    _dividendes_charges = False
+    _noms_par_ticker = None  # dict ticker -> nom, peuplé au fil des rafraîchissements
 
     def on_pre_enter(self):
+        if self._noms_par_ticker is None:
+            self._noms_par_ticker = {}
         self.rafraichir()
 
     def on_enter(self):
@@ -800,6 +969,8 @@ class PortfolioScreen(Screen):
         row = self._rows[index]
         row.ticker = r.get("ticker", row.ticker)
         row.nom = r.get("nom") or row.ticker
+        if self._noms_par_ticker is not None:
+            self._noms_par_ticker[row.ticker.upper()] = row.nom
 
         prix = r.get("prix_actuel")
         devise = r.get("devise") or ""
@@ -845,6 +1016,97 @@ class PortfolioScreen(Screen):
         else:
             self.erreur_globale = ""
         self.derniere_maj = datetime.now().strftime("%H:%M")
+        # Les dividendes réutilisent les noms résolus ci-dessus (via
+        # _noms_par_ticker) : on ne les recharge que si l'onglet a déjà
+        # été ouvert au moins une fois, pour rafraîchir le calendrier en
+        # même temps que le reste plutôt que de le laisser périmer.
+        if self._dividendes_charges:
+            self.charger_dividendes()
+
+    def changer_tab(self, tab):
+        if self.tab_actif == tab:
+            return
+        self.tab_actif = tab
+        if tab == "dividendes" and not self._dividendes_charges:
+            self.charger_dividendes()
+
+    def charger_dividendes(self):
+        positions = storage.charger_positions()
+        tickers = [p["ticker"] for p in positions if p.get("ticker")]
+        if not tickers:
+            self._afficher_dividendes({}, positions)
+            return
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
+
+        def tache():
+            data = api_client.obtenir_dividendes(server_url, tickers)
+            self._afficher_dividendes(data, positions)
+
+        threading.Thread(target=tache, daemon=True).start()
+
+    @mainthread
+    def _afficher_dividendes(self, data, positions):
+        self._dividendes_charges = True
+        box = self.ids.dividendes_box
+        box.clear_widgets()
+
+        par_ticker = {p["ticker"].upper(): p for p in positions if p.get("ticker")}
+        noms = self._noms_par_ticker or {}
+        # Palette stable par ticker (même couleur d'avatar partout dans
+        # l'app pour un même titre), pas juste par ordre d'apparition.
+        tickers_tries = sorted(par_ticker.keys())
+        couleur_par_ticker = {
+            t: PALETTE_AVATARS[i % len(PALETTE_AVATARS)] for i, t in enumerate(tickers_tries)
+        }
+
+        evenements_par_date = {}
+        for ticker, liste in (data or {}).items():
+            cle = ticker.upper()
+            pos = par_ticker.get(cle)
+            if not pos:
+                continue
+            quantite = pos.get("quantite") or 0
+            for e in liste:
+                date_iso = e.get("date")
+                montant = e.get("montant")
+                if not date_iso or montant is None:
+                    continue
+                evenements_par_date.setdefault(date_iso, []).append({
+                    "ticker": cle,
+                    "nom": noms.get(cle, cle),
+                    "montant": montant,
+                    "quantite": quantite,
+                    "prevu": bool(e.get("prevu")),
+                })
+
+        if not evenements_par_date:
+            box.add_widget(Label(
+                text="Aucun versement de dividende connu pour l'instant.",
+                size_hint_y=None, height=80, color=TXT_MUTED,
+            ))
+            return
+
+        for date_iso in sorted(evenements_par_date.keys()):
+            entete = Factory.DividendGroupHeader()
+            libelle = date_fr_majuscules(date_iso)
+            if evenements_par_date[date_iso][0]["prevu"]:
+                libelle += "  (PRÉVU)"
+            entete.text = libelle
+            box.add_widget(entete)
+
+            for e in sorted(evenements_par_date[date_iso], key=lambda x: x["nom"]):
+                row = Factory.DividendRow()
+                row.nom = e["nom"]
+                row.initiales = initiales_depuis_nom(e["nom"])
+                row.couleur_avatar = couleur_par_ticker.get(e["ticker"], PALETTE_AVATARS[0])
+                row.per_share_txt = f"{e['montant']:.2f} €"
+                qte = e["quantite"]
+                qte_txt = f"{qte:g}" if qte else "0"
+                row.qty_txt = f"{qte_txt} actions"
+                total = e["montant"] * qte
+                row.total_txt = f"+{total:.2f} €"
+                box.add_widget(row)
 
     def _ouvrir_detail(self, resultat):
         detail = self.manager.get_screen("detail")
