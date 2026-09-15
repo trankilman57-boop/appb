@@ -121,8 +121,8 @@ KV = """
 <PositionRow@BoxLayout>:
     orientation: "horizontal"
     size_hint_y: None
-    height: dp(140)
-    padding: dp(14), dp(12)
+    height: self.minimum_height
+    padding: dp(14), dp(8)
     spacing: dp(12)
     canvas.before:
         Color:
@@ -153,8 +153,8 @@ KV = """
     couleur_avatar: 0.184, 0.435, 0.929, 1
 
     AnchorLayout:
-        size_hint_x: None
-        width: dp(40)
+        size_hint: None, None
+        size: dp(40), dp(44)
         anchor_y: "top"
         padding: 0, dp(2), 0, 0
         AvatarCercle:
@@ -163,12 +163,15 @@ KV = """
 
     BoxLayout:
         orientation: "vertical"
-        spacing: dp(6)
+        size_hint_y: None
+        height: self.minimum_height
+        spacing: dp(3)
 
         BoxLayout:
-            size_hint_y: 0.44
-            padding: 0, dp(3), 0, 0
+            size_hint_y: None
+            height: max(label_nom.texture_size[1], label_pvmv.texture_size[1])
             Label:
+                id: label_nom
                 text: root.nom + ("   [color=9fa3ab]" + root.prix_txt + "[/color]" if root.prix_txt else "")
                 markup: True
                 bold: True
@@ -176,29 +179,33 @@ KV = """
                 color: 0.95, 0.96, 0.97, 1
                 halign: "left"
                 valign: "top"
-                text_size: self.size
+                text_size: self.width, None
                 shorten: True
             Label:
+                id: label_pvmv
                 text: root.pv_mv_txt
                 color: root.pv_mv_color
                 bold: True
                 font_size: "13sp"
                 halign: "right"
                 valign: "top"
-                text_size: self.size
+                text_size: self.width, None
                 size_hint_x: 0.5
 
         BoxLayout:
-            size_hint_y: 0.22
+            size_hint_y: None
+            height: label_qte.texture_size[1]
             Label:
+                id: label_qte
                 text: (root.quantite_txt + " actions" if root.quantite_txt else "")
                 font_size: "12sp"
                 color: 0.62, 0.65, 0.70, 1
                 halign: "left"
-                text_size: self.size
+                text_size: self.width, None
 
         BoxLayout:
-            size_hint_y: 0.35
+            size_hint_y: None
+            height: dp(18)
             spacing: dp(10)
             Label:
                 text: "[color=9fa3ab]Santé[/color]  [b]" + root.sante_txt + "[/b]/10"
@@ -206,6 +213,7 @@ KV = """
                 font_size: "12sp"
                 color: 0.85, 0.87, 0.90, 1
                 halign: "left"
+                size_hint_x: 0.85
                 text_size: self.size
             Label:
                 text: "[color=9fa3ab]Div[/color]  [b]" + root.div_txt + "[/b]/10"
@@ -213,12 +221,15 @@ KV = """
                 font_size: "12sp"
                 color: 0.85, 0.87, 0.90, 1
                 halign: "left"
+                size_hint_x: 0.65
                 text_size: self.size
             Label:
                 markup: True
                 text: ("[color=4caf50]" if root.verdict.startswith("OK") else "[color=e05555]" if root.verdict.startswith("KO") else "[color=f2a63f]" if root.verdict.startswith("MOYEN") else "[color=9fa3ab]") + (root.verdict.split(" ", 1)[-1] if " " in root.verdict else root.verdict) + "[/color]" + ("  [color=f2a63f][b]![/b][/color]" if root.a_des_alertes else "")
                 font_size: "12sp"
                 halign: "right"
+                shorten: True
+                shorten_from: "right"
                 text_size: self.size
 
 <NewsRow@BoxLayout>:
@@ -330,14 +341,14 @@ KV = """
             Line:
                 points: [self.x, self.y, self.x + self.width, self.y]
                 width: 1
-        on_release: root.replie = not root.replie
         AnchorLayout:
             size_hint_x: None
             width: dp(24)
             IconChevron:
+                id: icone_chevron
                 size_hint: None, None
                 size: dp(18), dp(18)
-                direction: "down" if root.replie else "up"
+                direction: "up"
                 couleur: 0.95, 0.96, 0.97, 1
         Label:
             text: root.nom_mois
@@ -361,9 +372,7 @@ KV = """
         id: contenu
         orientation: "vertical"
         size_hint_y: None
-        height: 0 if root.replie else self.minimum_height
-        opacity: 0 if root.replie else 1
-        disabled: root.replie
+        height: self.minimum_height
 
 <DividendGroupHeader@Label>:
     size_hint_y: None
@@ -1576,13 +1585,17 @@ class PortfolioScreen(Screen):
                 groupe_mois = Factory.DividendMonthGroup()
                 groupe_mois.nom_mois = f"{MOIS_FR[int(mois) - 1]} {annee}".upper()
                 groupe_mois.total_mois = f"+{total_par_mois[cle_mois]:.2f} €"
-                # On mémorise l'état replié/déplié d'un rafraîchissement à
-                # l'autre (sinon rouvrir l'onglet ou rafraîchir replierait
-                # tout à chaque fois).
-                groupe_mois.replie = cle_mois in self._mois_replies
-                groupe_mois.bind(replie=self._on_mois_replie_change)
                 groupe_mois._cle_mois = cle_mois
+                groupe_mois.ids.entete.bind(
+                    on_release=lambda inst, gm=groupe_mois: self._basculer_mois(gm)
+                )
                 box.add_widget(groupe_mois)
+                # État replié/déplié mémorisé d'un rafraîchissement à
+                # l'autre — appliqué APRÈS ajout au parent, une fois que
+                # contenu.minimum_height peut déjà être calculé pour les
+                # jours/lignes qu'on va y ajouter juste après.
+                if cle_mois in self._mois_replies:
+                    self._replier_mois(groupe_mois, replie=True, silencieux=True)
 
             entete_jour = Factory.DividendGroupHeader()
             libelle = date_fr_majuscules(date_iso)
@@ -1604,14 +1617,40 @@ class PortfolioScreen(Screen):
                 row.total_txt = f"+{total:.2f} €"
                 groupe_mois.ids.contenu.add_widget(row)
 
-    def _on_mois_replie_change(self, instance, valeur):
-        cle_mois = getattr(instance, "_cle_mois", None)
-        if cle_mois is None:
-            return
-        if valeur:
-            self._mois_replies.add(cle_mois)
+            # Si ce groupe doit démarrer replié, on réapplique la hauteur
+            # maintenant que toutes ses lignes du dernier jour ajouté sont
+            # en place (minimum_height n'était pas encore final plus haut).
+            if groupe_mois.replie:
+                self._replier_mois(groupe_mois, replie=True, silencieux=True)
+
+    def _basculer_mois(self, groupe_mois):
+        """Appelé au clic sur l'en-tête d'un mois. Pilote directement les
+        widgets en Python plutôt que de compter sur des bindings kv
+        réactifs (`root.replie`) — plus fiable, notamment dans un
+        ScrollView où on a eu des soucis de réactivité."""
+        self._replier_mois(groupe_mois, replie=not groupe_mois.replie)
+
+    def _replier_mois(self, groupe_mois, replie, silencieux=False):
+        groupe_mois.replie = replie
+        contenu = groupe_mois.ids.contenu
+        if replie:
+            contenu.height = 0
+            contenu.opacity = 0
+            contenu.disabled = True
         else:
-            self._mois_replies.discard(cle_mois)
+            contenu.height = contenu.minimum_height
+            contenu.opacity = 1
+            contenu.disabled = False
+        icone = groupe_mois.ids.get("icone_chevron")
+        if icone is not None:
+            icone.direction = "down" if replie else "up"
+        if not silencieux:
+            cle_mois = getattr(groupe_mois, "_cle_mois", None)
+            if cle_mois is not None:
+                if replie:
+                    self._mois_replies.add(cle_mois)
+                else:
+                    self._mois_replies.discard(cle_mois)
 
     def _ouvrir_detail(self, resultat):
         detail = self.manager.get_screen("detail")
