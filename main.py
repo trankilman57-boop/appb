@@ -2056,7 +2056,6 @@ class AnalystesScreen(Screen):
         if upgrades:
             lignes.append("")
             lignes.append("[b]HISTORIQUE PAR CABINET[/b]")
-            lignes.append("[size=11sp][color=9fa3ab](nom d'analyste individuel et objectif par cabinet non disponibles gratuitement)[/color][/size]")
             lignes.append("")
             couleurs_action = {
                 "up": "4caf50",
