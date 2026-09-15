@@ -1918,6 +1918,26 @@ class DetailScreen(Screen):
         ratio_vol = r.get("ratio_volume")
         if ratio_vol is not None:
             lignes_tech.append(f"Volume vs moyenne : x{ratio_vol:.1f}")
+
+        # --- RSI(14) / MACD(12,26,9) ---
+        rsi = r.get("rsi")
+        if rsi is not None:
+            if rsi < 30:
+                couleur = "5ecc66"
+                zone = " (survente)"
+            elif rsi > 70:
+                couleur = "e04c4c"
+                zone = " (surachat)"
+            else:
+                couleur = "cfd3dc"
+                zone = ""
+            lignes_tech.append(f"[color={couleur}]RSI(14) : {rsi:.0f}{zone}[/color]")
+        macd_hist = r.get("macd_hist")
+        if macd_hist is not None:
+            couleur = "5ecc66" if macd_hist > 0 else "e04c4c"
+            sens = "haussier" if macd_hist > 0 else "baissier"
+            lignes_tech.append(f"[color={couleur}]MACD {sens} (histogramme {macd_hist:+.2f})[/color]")
+
         self.technique_txt = "\n".join(lignes_tech)
 
         # --- Alertes actives ---
