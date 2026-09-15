@@ -328,7 +328,7 @@ KV = """
     replie: False
     nom_mois: ""
     total_mois: ""
-    on_touch_down: if self.ids.entete.collide_point(*args[1].pos): app.root.get_screen("portfolio")._basculer_mois(self)
+    on_touch_down: if self.ids.entete.collide_point(*args[1].pos): print("[DIVIDENDES-DEBUG] déclenchement bascule via groupe", root.nom_mois); root._screen._basculer_mois(root)
 
     BoutonBoxLayout:
         id: entete
@@ -1602,6 +1602,7 @@ class PortfolioScreen(Screen):
                 groupe_mois.nom_mois = f"{MOIS_FR[int(mois) - 1]} {annee}".upper()
                 groupe_mois.total_mois = f"+{total_par_mois[cle_mois]:.2f} €"
                 groupe_mois._cle_mois = cle_mois
+                groupe_mois._screen = self
                 print(f"[DIVIDENDES-DEBUG] création groupe mois {cle_mois}, entete existe={('entete' in groupe_mois.ids)}")
                 groupe_mois.ids.entete.bind(
                     on_release=lambda inst, gm=groupe_mois: self._basculer_mois(gm)
