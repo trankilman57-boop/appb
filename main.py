@@ -328,7 +328,7 @@ KV = """
     replie: False
     nom_mois: ""
     total_mois: ""
-    on_touch_up: if self.ids.entete.collide_point(*args[1].pos): print("[DIVIDENDES-DEBUG] déclenchement bascule via groupe", root.nom_mois); root._screen._basculer_mois(root)
+    on_touch_up: if self.ids.entete.collide_point(*args[1].pos) and not args[1].ud.get("dividende_traite"): args[1].ud.__setitem__("dividende_traite", True); root._screen._basculer_mois(root)
 
     BoutonBoxLayout:
         id: entete
