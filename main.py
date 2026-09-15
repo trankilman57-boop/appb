@@ -328,6 +328,7 @@ KV = """
     replie: False
     nom_mois: ""
     total_mois: ""
+    on_touch_down: if self.collide_point(*args[1].pos): print("[DIVIDENDES-DEBUG] touch reçu par le GROUPE", root.nom_mois, "collide_entete=", self.ids.entete.collide_point(*args[1].pos) if 'entete' in self.ids else "N/A")
 
     BoutonBoxLayout:
         id: entete
@@ -335,8 +336,10 @@ KV = """
         size_hint_y: None
         height: dp(40)
         padding: dp(2), 0
-        on_press: print("[DIVIDENDES-DEBUG] on_press entete", root.nom_mois)
+        on_press: print("[DIVIDENDES-DEBUG] on_press entete", root.nom_mois, "pos=", self.pos, "size=", self.size)
         on_release: print("[DIVIDENDES-DEBUG] on_release (kv) entete", root.nom_mois)
+        on_touch_down: if self.collide_point(*args[1].pos): print("[DIVIDENDES-DEBUG] on_touch_down entete (avant ButtonBehavior)", root.nom_mois, "state=", self.state)
+        on_state: print("[DIVIDENDES-DEBUG] state entete change ->", self.state, root.nom_mois)
         canvas.before:
             Color:
                 rgba: 0.15, 0.17, 0.21, 1
@@ -525,7 +528,7 @@ KV = """
             GhostButton:
                 text: "Rafraîchir"
                 disabled: root.refreshing
-                on_release: root.rafraichir()
+                on_release: print("[DIVIDENDES-DEBUG] bouton Rafraîchir manuel appuyé"); root.rafraichir()
             GhostButton:
                 text: ""
                 size_hint_x: 0.3
@@ -601,10 +604,12 @@ KV = """
                 spacing: dp(8)
 
         ScrollView:
+            id: scroll_dividendes
             size_hint_y: None if root.tab_actif != "dividendes" else 1
             height: 0 if root.tab_actif != "dividendes" else dp(1)
             opacity: 1 if root.tab_actif == "dividendes" else 0
             disabled: root.tab_actif != "dividendes"
+            on_touch_down: if self.collide_point(*args[1].pos): print("[DIVIDENDES-DEBUG] touch reçu par le SCROLLVIEW, scroll_y=", self.scroll_y)
             BoxLayout:
                 id: dividendes_box
                 orientation: "vertical"
@@ -1325,6 +1330,9 @@ class PortfolioScreen(Screen):
     derniere_maj = StringProperty("")
     tab_actif = StringProperty("portefeuille")
 
+    def on_tab_actif(self, instance, valeur):
+        print(f"[DIVIDENDES-DEBUG] tab_actif changé -> {valeur}")
+
     INTERVALLE_AUTO_REFRESH = 300  # secondes (5 minutes)
     _auto_refresh_event = None
     _dividendes_charges = False
@@ -1332,6 +1340,7 @@ class PortfolioScreen(Screen):
     _noms_par_ticker = None  # dict ticker -> nom, peuplé au fil des rafraîchissements
 
     def on_pre_enter(self):
+        print("[DIVIDENDES-DEBUG] on_pre_enter PortfolioScreen (déclenche rafraichir())")
         if self._noms_par_ticker is None:
             self._noms_par_ticker = {}
         self.rafraichir()
@@ -1341,9 +1350,10 @@ class PortfolioScreen(Screen):
         # dans on_leave pour ne pas continuer à interroger le serveur en
         # arrière-plan une fois qu'on a quitté l'écran portefeuille.
         if self._auto_refresh_event is None:
-            self._auto_refresh_event = Clock.schedule_interval(
-                lambda dt: self.rafraichir(), self.INTERVALLE_AUTO_REFRESH
-            )
+            def _tick(dt):
+                print("[DIVIDENDES-DEBUG] timer auto-refresh (5 min) déclenche rafraichir()")
+                self.rafraichir()
+            self._auto_refresh_event = Clock.schedule_interval(_tick, self.INTERVALLE_AUTO_REFRESH)
 
     def on_leave(self):
         if self._auto_refresh_event is not None:
@@ -1486,17 +1496,19 @@ class PortfolioScreen(Screen):
         # _noms_par_ticker) : on ne les recharge que si l'onglet a déjà
         # été ouvert au moins une fois, pour rafraîchir le calendrier en
         # même temps que le reste plutôt que de le laisser périmer.
+        print(f"[DIVIDENDES-DEBUG] _finaliser : _dividendes_charges={self._dividendes_charges} -> {'reload dividendes' if self._dividendes_charges else 'skip'}")
         if self._dividendes_charges:
-            self.charger_dividendes()
+            self.charger_dividendes(raison="_finaliser (fin de rafraichir())")
 
     def changer_tab(self, tab):
         if self.tab_actif == tab:
             return
         self.tab_actif = tab
         if tab == "dividendes" and not self._dividendes_charges:
-            self.charger_dividendes()
+            self.charger_dividendes(raison="changer_tab (premier accès onglet)")
 
-    def charger_dividendes(self):
+    def charger_dividendes(self, raison="inconnue"):
+        print(f"[DIVIDENDES-DEBUG] charger_dividendes appelé — raison: {raison}")
         positions = storage.charger_positions()
         tickers = [p["ticker"] for p in positions if p.get("ticker")]
         if not tickers:
@@ -1513,6 +1525,8 @@ class PortfolioScreen(Screen):
 
     @mainthread
     def _afficher_dividendes(self, data, positions):
+        import time as _time
+        print(f"[DIVIDENDES-DEBUG] _afficher_dividendes appelé (rebuild complet) à t={_time.time():.2f}")
         self._dividendes_charges = True
         if self._mois_replies is None:
             self._mois_replies = set()
