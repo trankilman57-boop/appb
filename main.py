@@ -153,8 +153,8 @@ KV = """
     couleur_avatar: 0.184, 0.435, 0.929, 1
 
     AnchorLayout:
-        size_hint: None, None
-        size: dp(40), dp(44)
+        size_hint_x: None
+        width: dp(40)
         anchor_y: "top"
         padding: 0, dp(2), 0, 0
         AvatarCercle:
