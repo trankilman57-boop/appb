@@ -328,7 +328,7 @@ KV = """
     replie: False
     nom_mois: ""
     total_mois: ""
-    on_touch_down: if self.collide_point(*args[1].pos): print("[DIVIDENDES-DEBUG] touch reçu par le GROUPE", root.nom_mois, "collide_entete=", self.ids.entete.collide_point(*args[1].pos) if 'entete' in self.ids else "N/A")
+    on_touch_down: if self.ids.entete.collide_point(*args[1].pos): app.root.get_screen("portfolio")._basculer_mois(self)
 
     BoutonBoxLayout:
         id: entete
