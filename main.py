@@ -1646,7 +1646,8 @@ class PortfolioScreen(Screen):
         widgets en Python plutôt que de compter sur des bindings kv
         réactifs (`root.replie`) — plus fiable, notamment dans un
         ScrollView où on a eu des soucis de réactivité."""
-        print(f"[DIVIDENDES-DEBUG] _basculer_mois appelé, replie actuel={groupe_mois.replie}")
+        import time as _time
+        print(f"[DIVIDENDES-DEBUG] _basculer_mois appelé t={_time.time():.3f} mois={groupe_mois.nom_mois} replie actuel={groupe_mois.replie}")
         self._replier_mois(groupe_mois, replie=not groupe_mois.replie)
 
     def _replier_mois(self, groupe_mois, replie, silencieux=False):
@@ -2016,7 +2017,11 @@ class AnalystesScreen(Screen):
 
     @mainthread
     def _afficher(self, avis):
-        if not avis:
+        upgrades = (avis or {}).get("upgrades_downgrades") or []
+        a_du_contenu_principal = bool(avis) and any(
+            avis.get(k) is not None for k in ("strong_buy", "consensus", "prix_cible_moyen")
+        )
+        if not a_du_contenu_principal and not upgrades:
             self.statut_txt = "Aucun avis analyste disponible pour ce titre."
             self.contenu_txt = ""
             self.source_txt = ""
@@ -2048,8 +2053,39 @@ class AnalystesScreen(Screen):
                 ligne_cible += f"\n(entre {avis['prix_cible_bas']:.2f} et {avis['prix_cible_haut']:.2f})"
             lignes.append(ligne_cible)
 
+        if upgrades:
+            lignes.append("")
+            lignes.append("[b]HISTORIQUE PAR CABINET[/b]")
+            lignes.append("[size=11sp][color=9fa3ab](nom d'analyste individuel et objectif par cabinet non disponibles gratuitement)[/color][/size]")
+            lignes.append("")
+            couleurs_action = {
+                "up": "4caf50",
+                "init": "2f6fed",
+                "reit": "9fa3ab",
+                "main": "9fa3ab",
+                "down": "e05555",
+            }
+            libelles_action = {
+                "up": "Relevée",
+                "down": "Abaissée",
+                "main": "Maintenue",
+                "init": "Initiée",
+                "reit": "Réitérée",
+            }
+            for u in upgrades:
+                action_brute = (u.get("action") or "").lower()
+                couleur = couleurs_action.get(action_brute, "9fa3ab")
+                libelle = libelles_action.get(action_brute, u.get("action") or "—")
+                notes = ""
+                if u.get("note_avant") and u.get("note_apres") and u["note_avant"] != u["note_apres"]:
+                    notes = f" ({u['note_avant']} → {u['note_apres']})"
+                elif u.get("note_apres"):
+                    notes = f" ({u['note_apres']})"
+                lignes.append(f"{u.get('date', '')} — [b]{u.get('cabinet', '—')}[/b] : "
+                               f"[color={couleur}]{libelle}[/color]{notes}")
+
         self.contenu_txt = "\n".join(lignes) if lignes else "Données incomplètes."
-        self.source_txt = f"Source : {avis.get('source', 'inconnue')}"
+        self.source_txt = f"Source : {avis.get('source', 'inconnue')}" if avis.get("source") else ""
 
 
 class SettingsScreen(Screen):
