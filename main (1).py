@@ -28,6 +28,8 @@ from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.label import Label
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.widget import Widget
 from kivy.graphics import Color as GraphicsColor, Ellipse, Rectangle, Line, PushMatrix, PopMatrix, Rotate
 from kivy.metrics import dp as dp_py
@@ -316,7 +318,7 @@ KV = """
     nom_mois: ""
     total_mois: ""
 
-    BoxLayout:
+    BoutonBoxLayout:
         id: entete
         orientation: "horizontal"
         size_hint_y: None
@@ -328,7 +330,7 @@ KV = """
             Line:
                 points: [self.x, self.y, self.x + self.width, self.y]
                 width: 1
-        on_touch_up: if self.collide_point(*args[1].pos): root.replie = not root.replie
+        on_release: root.replie = not root.replie
         AnchorLayout:
             size_hint_x: None
             width: dp(24)
@@ -1209,6 +1211,15 @@ KV = """
 
 
 
+class BoutonBoxLayout(ButtonBehavior, BoxLayout):
+    """BoxLayout avec comportement bouton (cycle presse/relâche fiable,
+    y compris dans un ScrollView). Utilisé pour l'en-tête de mois
+    repliable de l'onglet Dividendes, qui a besoin à la fois d'un
+    agencement horizontal (icône + libellés) ET d'un vrai on_release —
+    aucune classe Kivy de base ne combine les deux."""
+    pass
+
+
 class IconEngrenage(Widget):
     """Roue crantée dessinée en vectoriel (Color/Ellipse/Rectangle), pas un
     caractère de police — les caractères comme ⚙ ne sont pas dans la
@@ -1247,6 +1258,7 @@ class IconEngrenage(Widget):
 
 
 Factory.register("IconEngrenage", cls=IconEngrenage)
+Factory.register("BoutonBoxLayout", cls=BoutonBoxLayout)
 
 
 class IconChevron(Widget):

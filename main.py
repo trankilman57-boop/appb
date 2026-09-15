@@ -328,7 +328,7 @@ KV = """
             Line:
                 points: [self.x, self.y, self.x + self.width, self.y]
                 width: 1
-        on_touch_down: if self.collide_point(*args[1].pos): root.replie = not root.replie
+        on_touch_up: if self.collide_point(*args[1].pos): root.replie = not root.replie
         AnchorLayout:
             size_hint_x: None
             width: dp(24)
