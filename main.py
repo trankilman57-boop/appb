@@ -335,6 +335,8 @@ KV = """
         size_hint_y: None
         height: dp(40)
         padding: dp(2), 0
+        on_press: print("[DIVIDENDES-DEBUG] on_press entete", root.nom_mois)
+        on_release: print("[DIVIDENDES-DEBUG] on_release (kv) entete", root.nom_mois)
         canvas.before:
             Color:
                 rgba: 0.15, 0.17, 0.21, 1
@@ -1586,6 +1588,7 @@ class PortfolioScreen(Screen):
                 groupe_mois.nom_mois = f"{MOIS_FR[int(mois) - 1]} {annee}".upper()
                 groupe_mois.total_mois = f"+{total_par_mois[cle_mois]:.2f} €"
                 groupe_mois._cle_mois = cle_mois
+                print(f"[DIVIDENDES-DEBUG] création groupe mois {cle_mois}, entete existe={('entete' in groupe_mois.ids)}")
                 groupe_mois.ids.entete.bind(
                     on_release=lambda inst, gm=groupe_mois: self._basculer_mois(gm)
                 )
@@ -1628,9 +1631,11 @@ class PortfolioScreen(Screen):
         widgets en Python plutôt que de compter sur des bindings kv
         réactifs (`root.replie`) — plus fiable, notamment dans un
         ScrollView où on a eu des soucis de réactivité."""
+        print(f"[DIVIDENDES-DEBUG] _basculer_mois appelé, replie actuel={groupe_mois.replie}")
         self._replier_mois(groupe_mois, replie=not groupe_mois.replie)
 
     def _replier_mois(self, groupe_mois, replie, silencieux=False):
+        print(f"[DIVIDENDES-DEBUG] _replier_mois replie={replie} silencieux={silencieux}")
         groupe_mois.replie = replie
         contenu = groupe_mois.ids.contenu
         if replie:
@@ -1641,6 +1646,7 @@ class PortfolioScreen(Screen):
             contenu.height = contenu.minimum_height
             contenu.opacity = 1
             contenu.disabled = False
+        print(f"[DIVIDENDES-DEBUG] contenu.height={contenu.height} minimum_height={contenu.minimum_height} enfants={len(contenu.children)}")
         icone = groupe_mois.ids.get("icone_chevron")
         if icone is not None:
             icone.direction = "down" if replie else "up"
