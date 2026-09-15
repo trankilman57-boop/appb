@@ -1005,6 +1005,9 @@ KV = """
                     GhostButton:
                         text: "Analystes"
                         on_release: root.ouvrir_analystes()
+                    GhostButton:
+                        text: "Figures"
+                        on_release: root.ouvrir_patterns()
 
                 GhostButton:
                     text: "Supprimer la position"
@@ -1144,6 +1147,100 @@ KV = """
                     color: 0.45, 0.48, 0.52, 1
                     size_hint_y: None
                     height: self.texture_size[1] if root.source_txt else 0
+                    text_size: self.width, None
+                    halign: "left"
+
+<PatternsScreen>:
+    name: "patterns"
+    canvas.before:
+        Color:
+            rgba: 0.07, 0.08, 0.10, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    BoxLayout:
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(64)
+            padding: dp(12), dp(10)
+            spacing: dp(8)
+            canvas.before:
+                Color:
+                    rgba: 0.10, 0.11, 0.14, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            GhostButton:
+                text: ""
+                size_hint_x: 0.15
+                on_release: root.manager.current = "detail"
+                AnchorLayout:
+                    size: self.parent.size
+                    pos: self.parent.pos
+                    IconChevron:
+                        size_hint: None, None
+                        size: dp(20), dp(20)
+                        direction: "left"
+                        couleur: 0.78, 0.80, 0.82, 1
+            Label:
+                text: "Figures chartistes — " + root.nom
+                bold: True
+                font_size: "16sp"
+                color: 0.95, 0.96, 0.97, 1
+                halign: "left"
+                text_size: self.size
+
+        Label:
+            text: root.statut_txt
+            color: 0.62, 0.65, 0.70, 1
+            size_hint_y: None
+            height: dp(30) if root.statut_txt else 0
+            font_size: "12sp"
+
+        ScrollView:
+            BoxLayout:
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(16)
+                spacing: dp(12)
+
+                Label:
+                    text: root.figure_txt
+                    markup: True
+                    size_hint_y: None
+                    height: self.texture_size[1] if root.figure_txt else 0
+                    text_size: self.width, None
+                    halign: "left"
+                    font_size: "17sp"
+
+                Label:
+                    text: root.levels_txt
+                    markup: True
+                    size_hint_y: None
+                    height: self.texture_size[1] if root.levels_txt else 0
+                    text_size: self.width, None
+                    halign: "left"
+                    color: 0.90, 0.92, 0.94, 1
+                    font_size: "13sp"
+
+                Label:
+                    text: root.confirmation_txt
+                    markup: True
+                    size_hint_y: None
+                    height: self.texture_size[1] if root.confirmation_txt else 0
+                    text_size: self.width, None
+                    halign: "left"
+                    color: 0.90, 0.92, 0.94, 1
+
+                Label:
+                    text: root.avertissement_txt
+                    font_size: "11sp"
+                    color: 0.45, 0.48, 0.52, 1
+                    size_hint_y: None
+                    height: self.texture_size[1] if root.avertissement_txt else 0
                     text_size: self.width, None
                     halign: "left"
 
@@ -1962,6 +2059,12 @@ class DetailScreen(Screen):
         self.manager.transition = SlideTransition(direction="left")
         self.manager.current = "analystes"
 
+    def ouvrir_patterns(self):
+        patterns_screen = self.manager.get_screen("patterns")
+        patterns_screen.charger(self.ticker, self.nom, self._resultat.get("devise") if self._resultat else "")
+        self.manager.transition = SlideTransition(direction="left")
+        self.manager.current = "patterns"
+
     def supprimer(self):
         if self._resultat:
             positions = storage.charger_positions()
@@ -2107,6 +2210,94 @@ class AnalystesScreen(Screen):
         self.source_txt = f"Source : {avis.get('source', 'inconnue')}" if avis.get("source") else ""
 
 
+class PatternsScreen(Screen):
+    """Écran dédié "Figures chartistes" : détection de figure (Double Top,
+    Tête-Épaules, Triangle, ...), niveaux de prix indicatifs, confirmation
+    RSI/MACD/tendance et score de force. Calcul plus lourd que le reste
+    (1 an d'historique + détection de pivots côté serveur), donc à la
+    demande via un écran séparé plutôt que dans le cycle automatique du
+    portefeuille — même logique que Actualités/Analystes."""
+    nom = StringProperty("")
+    statut_txt = StringProperty("")
+    figure_txt = StringProperty("")
+    levels_txt = StringProperty("")
+    confirmation_txt = StringProperty("")
+    avertissement_txt = StringProperty(
+        "Détection mécanique de figure chartiste à titre indicatif — "
+        "ce n'est pas un conseil en investissement."
+    )
+    _ticker = None
+    _devise = ""
+
+    def charger(self, ticker, nom, devise=""):
+        self._ticker = ticker
+        self._devise = devise or ""
+        self.nom = nom
+        self.figure_txt = ""
+        self.levels_txt = ""
+        self.confirmation_txt = ""
+        self.statut_txt = "Analyse de la figure chartiste... (peut prendre quelques secondes)"
+        threading.Thread(target=self._charger_en_fond, args=(ticker,), daemon=True).start()
+
+    def _charger_en_fond(self, ticker):
+        settings = storage.charger_settings()
+        server_url = settings.get("server_url", "")
+        resultat = api_client.obtenir_figure_chartiste(server_url, ticker)
+        self._afficher(resultat)
+
+    @mainthread
+    def _afficher(self, resultat):
+        resultat = resultat or {}
+        if resultat.get("erreur"):
+            self.statut_txt = resultat["erreur"]
+            self.figure_txt = ""
+            self.levels_txt = ""
+            self.confirmation_txt = ""
+            return
+
+        self.statut_txt = ""
+        figure = resultat.get("figure") or "Aucune figure détectée"
+        signal = resultat.get("signal") or "NEUTRE"
+
+        if "ACHAT" in signal:
+            couleur_signal = "5ecc66"
+        elif "VENTE" in signal:
+            couleur_signal = "e04c4c"
+        else:
+            couleur_signal = "f2a63f"
+
+        force = (resultat.get("force") or {}).get("score")
+        force_txt = f" — Force : {force}%" if force is not None else ""
+        self.figure_txt = f"[b]{figure}[/b]\n[color={couleur_signal}]{signal}[/color]{force_txt}"
+
+        levels = resultat.get("levels")
+        if levels:
+            lignes_levels = ["[b]Niveaux indicatifs[/b]", ""]
+            lignes_levels.append(f"Entrée : {levels.get('entry')}")
+            lignes_levels.append(f"Objectif : {levels.get('target')}")
+            lignes_levels.append(f"Stop : {levels.get('stop')}")
+            if levels.get("note"):
+                lignes_levels.append("")
+                lignes_levels.append(f"[color=9fa3ab]{levels['note']}[/color]")
+            self.levels_txt = "\n".join(lignes_levels)
+        else:
+            self.levels_txt = ""
+
+        lignes_conf = []
+        indicateurs = resultat.get("indicateurs") or {}
+        if indicateurs.get("confirmation"):
+            lignes_conf.append("[b]Confirmation RSI/MACD[/b]")
+            lignes_conf.append(indicateurs["confirmation"])
+        tendance = resultat.get("tendance") or {}
+        if tendance.get("aligned") is not None:
+            couleur = "5ecc66" if tendance["aligned"] else "e04c4c"
+            etat = "alignée avec" if tendance["aligned"] else "en désaccord avec"
+            lignes_conf.append("")
+            lignes_conf.append(f"[color={couleur}]Tendance de fond (SMA200) {etat} le signal "
+                                f"(SMA200 : {tendance.get('sma200')})[/color]")
+        self.confirmation_txt = "\n".join(lignes_conf)
+
+
 class SettingsScreen(Screen):
     statut_txt = StringProperty("")
     statut_color = ListProperty(list(WHITE))
@@ -2160,6 +2351,7 @@ class SuiviBourseApp(App):
         sm.add_widget(DetailScreen())
         sm.add_widget(NewsScreen())
         sm.add_widget(AnalystesScreen())
+        sm.add_widget(PatternsScreen())
         sm.add_widget(SettingsScreen())
         Window.bind(on_keyboard=self._on_keyboard)
         return sm
